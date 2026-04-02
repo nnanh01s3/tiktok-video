@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment (contains API keys)
+config/.env
+.env
+
+# Database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/last_run.log
+
+# Queue (video files, temp files)
+queue/
+
+# Logs
+logs/
+
+# Docker (not used on VPS)
+Dockerfile
+docker-compose.yml
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Misc
+data;C
