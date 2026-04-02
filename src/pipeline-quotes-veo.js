@@ -771,7 +771,7 @@ export async function runPipeline(opts = {}) {
   // --- Step 5: Compose final video ---
   log("Step 5: Composing final video...");
   const videoPath = `${QUEUE_DIR}/${jobId}.mp4`;
-  const titleText = scriptResult.hookLine || null;
+  const titleText = scriptResult.caption?.split("\n")[0] || scriptResult.hookLine || null;
   const videoResult = await composeVideo(veoClips, quotes, audioPath, videoPath, hookClipPath, titleText);
   log(`Final video: ${videoResult.duration.toFixed(1)}s at ${videoPath}`);
 
