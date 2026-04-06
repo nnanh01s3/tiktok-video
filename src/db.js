@@ -98,11 +98,16 @@ function initSchema(db) {
   } catch {
     // Column already exists — ignore
   }
-  // Add text_vi_display for proper Vietnamese translations
+  // Add text_vi_display for proper Vietnamese translations (only if quotes_v2 exists)
   try {
-    db.exec(`ALTER TABLE quotes_v2 ADD COLUMN text_vi_display TEXT`);
+    const hasV2 = db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='quotes_v2'`
+    ).get();
+    if (hasV2) {
+      db.exec(`ALTER TABLE quotes_v2 ADD COLUMN text_vi_display TEXT`);
+    }
   } catch {
-    // Column already exists — ignore
+    // Column already exists or table doesn't exist — ignore
   }
 }
 

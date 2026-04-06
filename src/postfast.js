@@ -33,37 +33,52 @@ export async function getTikTokAccounts() {
  * Upload a video file to PostFast (via S3 signed URL).
  * Returns the S3 key to use in post creation.
  */
-export async function uploadVideo(videoPath) {
-  // Step 1: Get signed upload URL
-  const urlRes = await fetch(`${API_BASE}/file/get-signed-upload-urls`, {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify({
-      contentType: "video/mp4",
-      count: 1,
-    }),
-  });
+export async function uploadVideo(videoPath, { maxRetries = 3 } = {}) {
+  let lastError;
 
-  if (!urlRes.ok) throw new Error(`PostFast upload URL error ${urlRes.status}: ${await urlRes.text()}`);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Step 1: Get signed upload URL
+      const urlRes = await fetch(`${API_BASE}/file/get-signed-upload-urls`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          contentType: "video/mp4",
+          count: 1,
+        }),
+      });
 
-  const [{ key, signedUrl }] = await urlRes.json();
+      if (!urlRes.ok) throw new Error(`PostFast upload URL error ${urlRes.status}: ${await urlRes.text()}`);
 
-  // Step 2: Upload video to S3 via signed URL
-  const videoBuffer = await readFile(videoPath);
-  const fileSize = (await stat(videoPath)).size;
+      const [{ key, signedUrl }] = await urlRes.json();
 
-  const uploadRes = await fetch(signedUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "video/mp4",
-      "Content-Length": fileSize.toString(),
-    },
-    body: videoBuffer,
-  });
+      // Step 2: Upload video to S3 via signed URL
+      const videoBuffer = await readFile(videoPath);
+      const fileSize = (await stat(videoPath)).size;
 
-  if (!uploadRes.ok) throw new Error(`S3 upload error ${uploadRes.status}: ${await uploadRes.text()}`);
+      const uploadRes = await fetch(signedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "video/mp4",
+          "Content-Length": fileSize.toString(),
+        },
+        body: videoBuffer,
+      });
 
-  return key;
+      if (!uploadRes.ok) throw new Error(`S3 upload error ${uploadRes.status}: ${await uploadRes.text()}`);
+
+      return key;
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = attempt * 5000; // 5s, 10s, 15s
+        console.log(`[PostFast] Upload attempt ${attempt} failed: ${err.message}. Retrying in ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 /**

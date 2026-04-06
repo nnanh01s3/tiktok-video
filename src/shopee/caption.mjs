@@ -40,7 +40,7 @@ Chỉ trả về caption thuần túy, không giải thích gì thêm.`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-haiku-20240307", // Dùng Haiku - nhanh và rẻ
+        model: "claude-haiku-4-5-20251001", // Haiku 4.5 - nhanh, rẻ, chất lượng tốt hơn
         max_tokens: 500,
         messages: [{ role: "user", content: prompt }],
       }),
