@@ -81,7 +81,15 @@ export const PAGES = {
 // ── Trending Repost Config ────────────────────────────────────────────────
 export const TRENDING_CONFIG = {
   fbPageId: "f195f36e-ebec-4589-a05c-ac5ddfd15b24", // Sưu Tầm Hàng Dị
-  tiktokId: null, // Set khi tạo page TikTok mới trên PostFast
+  tiktokId: null, // PostFast TikTok UUID (null = không dùng PostFast cho TikTok)
+  // TikTok Direct posting — bypass PostFast account limit
+  // Cách dùng: Mở Chrome 1 lần với --remote-debugging-port=9402, login TikTok @suutam0405
+  // Hoặc để module tự launch Chrome với profile riêng (cần login lần đầu)
+  tiktokDirect: {
+    account: "suutam0405",            // @suutam0405
+    cdpPort: 9402,                    // Chrome CDP port (tránh xung đột 9399-9401)
+    chromeProfile: "D:/tiktok/data/tiktok/chrome_profile",
+  },
   // Từ khóa tìm video trending (rotate mỗi lần chạy)
   tiktokKeywords: [
     "hàng độc lạ", "đồ gia dụng thông minh", "sản phẩm hay",

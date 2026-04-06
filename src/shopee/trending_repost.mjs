@@ -584,7 +584,7 @@ async function uploadAndPost(videoPath, caption, scheduledAt) {
     log(`   ✅ FB Scheduled: ${scheduledAt} | ID: ${results.fbPostId}`);
   }
 
-  // Post to TikTok (khi đã tạo page)
+  // Post to TikTok via PostFast (nếu có tiktokId trong PostFast)
   if (CFG.tiktokId) {
     try {
       const ttSchedule = new Date(new Date(scheduledAt).getTime() + 5 * 60_000)
@@ -608,6 +608,28 @@ async function uploadAndPost(videoPath, caption, scheduledAt) {
       }
     } catch (e) {
       log(`   ⚠️ TikTok post failed: ${e.message?.slice(0, 60)}`);
+    }
+  }
+
+  // Post to TikTok Direct — bypass PostFast account limit (@suutam0405)
+  if (CFG.tiktokDirect) {
+    try {
+      const { TikTokDirectPoster } = await import("../tiktok-direct.mjs");
+      const poster = new TikTokDirectPoster({
+        cdpPort: CFG.tiktokDirect.cdpPort,
+        chromeProfile: CFG.tiktokDirect.chromeProfile,
+        log,
+      });
+      const ttResult = await poster.post(videoPath, caption);
+      if (ttResult.success) {
+        results.ttDirectPostUrl = ttResult.postUrl;
+        log(`   ✅ TikTok Direct (@${CFG.tiktokDirect.account}): posted`);
+      } else {
+        log(`   ⚠️ TikTok Direct failed: ${ttResult.error}`);
+      }
+      await poster.close();
+    } catch (e) {
+      log(`   ⚠️ TikTok Direct error: ${e.message?.slice(0, 80)}`);
     }
   }
 
