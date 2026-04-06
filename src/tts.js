@@ -2,18 +2,14 @@
  * Unified TTS module.
  *
  * Strategy:
- *   1. Try ElevenLabs first (premium quality)
- *   2. On quota/auth error → fallback to Edge TTS (free, unlimited)
- *   3. On explicit --tts=edge flag → skip ElevenLabs entirely
+ *   1. Gemini TTS (Algenib voice — gravelly, deep, mature) — primary
+ *   2. Edge TTS (vi-VN-NamMinhNeural) — free fallback
  *
- * Edge TTS uses Microsoft's speech service via the edge-tts package.
- * Quality is decent for TikTok — not as good as ElevenLabs but free.
+ * Edge TTS uses Microsoft's speech service via the msedge-tts package.
  */
 import { writeFile } from "fs/promises";
 import { existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
-
-const ELEVENLABS_API = "https://api.elevenlabs.io/v1";
 
 // Edge TTS voices — Vietnamese for motivation content
 const EDGE_VOICES = {
@@ -34,64 +30,6 @@ const VOICE_PROSODY = {
 function ensureDir(filePath) {
   const dir = dirname(filePath);
   if (dir && !existsSync(dir)) mkdirSync(dir, { recursive: true });
-}
-
-/**
- * Generate voiceover using ElevenLabs.
- * Returns null on quota/auth errors (caller should fallback).
- */
-async function tryElevenLabs(script, outputPath, options) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return null;
-
-  // "Adam" voice — deep, mature male. Good for Vietnamese motivation content.
-  // Alternative: "Daniel" (onwK4e9ZLDjBPHTpiIRo) — British, authoritative
-  // Alternative: "Callum" (N2lVS1w4EtoT3dr4eOWO) — mature, low, calm
-  const voiceId = options.voiceId || process.env.ELEVENLABS_VOICE_ID || "pNInz6obpgDQGcFmaJgB";
-  const model = options.model || "eleven_multilingual_v2";
-
-  try {
-    const response = await fetch(`${ELEVENLABS_API}/text-to-speech/${voiceId}`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text: script,
-        model_id: model,
-        voice_settings: {
-          stability: options.stability ?? 0.65,        // Higher → more consistent deep tone
-          similarity_boost: options.similarityBoost ?? 0.80,  // Higher → truer to voice character
-          style: options.style ?? 0.45,              // Mid-high → expressive but controlled
-          use_speaker_boost: true,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      // Quota or auth errors → fallback
-      if (response.status === 401 || response.status === 429 || err.includes("quota_exceeded")) {
-        console.log(`[TTS] ElevenLabs unavailable (${response.status}), falling back to Edge TTS`);
-        return null;
-      }
-      throw new Error(`ElevenLabs error ${response.status}: ${err}`);
-    }
-
-    ensureDir(outputPath);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    await writeFile(outputPath, buffer);
-
-    return { provider: "elevenlabs", path: outputPath, sizeBytes: buffer.length, voiceId };
-  } catch (err) {
-    if (err.message.includes("quota_exceeded") || err.message.includes("401")) {
-      console.log(`[TTS] ElevenLabs error: ${err.message}, falling back to Edge TTS`);
-      return null;
-    }
-    throw err;
-  }
 }
 
 /**
@@ -132,9 +70,7 @@ async function useEdgeTTS(script, outputPath, options) {
 }
 
 /**
- * Generate voiceover — priority: Gemini TTS → Edge TTS.
- *
- * ElevenLabs removed — Gemini TTS is better quality and cheaper.
+ * Generate voiceover — priority: Gemini TTS (Algenib) → Edge TTS.
  *
  * @param {string} script - Text to convert to speech
  * @param {string} outputPath - Where to save the audio file

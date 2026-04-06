@@ -9,7 +9,6 @@ import dotenv from "dotenv";
 dotenv.config({ path: "./config/.env" });
 import cron from "node-cron";
 import { runPipeline as runVeoPipeline } from "./pipeline-quotes-veo.js";
-// import { runPipeline as runFFmpegPipeline } from "./pipeline-quotes.js"; // TẠM TẮT — dùng Imagen thay thế
 import { getDb, getQuoteStats, getPendingJobs } from "./db.js";
 
 const TIMEZONE = "Asia/Ho_Chi_Minh";
