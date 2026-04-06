@@ -209,14 +209,23 @@ export class TikTokDirectPoster {
   }
 
   async connect() {
+    // Close stale connection if any
+    if (this._ws) {
+      try { this._ws.close(); } catch {}
+      this._ws = null;
+      this._cdp = null;
+    }
+
     const conn = await connectChrome(this.port, this.profile, this.log);
     this._ws = conn.ws;
     this._cdp = conn.cdp;
 
     // Anti-detection
-    await this._cdp("Page.addScriptToEvaluateOnNewDocument", {
-      source: "Object.defineProperty(navigator, 'webdriver', { get: () => false });"
-    });
+    try {
+      await this._cdp("Page.addScriptToEvaluateOnNewDocument", {
+        source: "Object.defineProperty(navigator, 'webdriver', { get: () => false });"
+      });
+    } catch {} // May fail on already-loaded pages, ok
     await this._cdp("Page.enable");
     await this._cdp("DOM.enable");
 
@@ -278,13 +287,13 @@ export class TikTokDirectPoster {
    * Core upload flow — the actual CDP automation sequence.
    */
   async _doPost(absPath, caption) {
-    const cdp = this._cdp;
+    let cdp = this._cdp;
     const log = this.log;
 
     // ── Step 1: Navigate to upload page ──
     log("[TikTok] Step 1: Navigating to upload page...");
     await cdp("Page.navigate", { url: UPLOAD_URL });
-    await sleep(3000);
+    await sleep(5000);
 
     // Check if logged in (redirect to login page = not logged in)
     const currentUrl = await evalPage(cdp, "location.href");
@@ -292,11 +301,40 @@ export class TikTokDirectPoster {
       throw new Error("Not logged in — please login to TikTok in Chrome first");
     }
 
+    // ── Step 1b: Discard any pending upload from previous run ──
+    const hasPending = await evalPage(cdp, `
+      !!([...document.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Discard'))
+    `);
+    if (hasPending) {
+      log("[TikTok] Found pending upload — opening fresh tab instead...");
+
+      // Create a new tab with upload URL (cleanest way to reset state)
+      const { targetId } = await cdp("Target.createTarget", { url: UPLOAD_URL });
+      await sleep(5000);
+
+      // Get the new tab's WebSocket URL and reconnect
+      const tabsRes = await fetch(`http://localhost:${this.port}/json`, { signal: AbortSignal.timeout(3000) });
+      const tabs = await tabsRes.json();
+      const newTab = tabs.find(t => t.id === targetId) || tabs.find(t => t.url.includes("upload") && t.type === "page");
+      if (newTab?.webSocketDebuggerUrl) {
+        try { this._ws.close(); } catch {}
+        const conn = await openCdp(newTab.webSocketDebuggerUrl);
+        this._ws = conn.ws;
+        this._cdp = conn.cdp;
+        cdp = this._cdp; // update local ref
+        await cdp("Page.enable");
+        await cdp("DOM.enable");
+        log("[TikTok] Switched to fresh tab");
+      }
+    }
+
     // ── Step 2: Wait for file input ──
     log("[TikTok] Step 2: Waiting for file input...");
-    const hasInput = await waitForSelector(cdp, 'input[type="file"][accept*="video"]', 15_000, log);
+    const hasInput = await waitForSelector(cdp, 'input[type="file"][accept*="video"]', 20_000, log);
     if (!hasInput) {
-      throw new Error("File input not found on upload page");
+      // TikTok might show error page — check
+      const bodyText = await evalPage(cdp, `document.body?.innerText?.slice(0, 200)`);
+      throw new Error(`File input not found. Page content: ${bodyText?.slice(0, 100)}`);
     }
 
     // ── Step 3: Set video file via CDP ──
@@ -406,85 +444,125 @@ export class TikTokDirectPoster {
 
   /**
    * Fill the caption editor with text.
-   * Uses clipboard paste for reliability with React/DraftJS editors.
+   *
+   * TikTok auto-fills the filename into the editor when a video is uploaded.
+   * We must COMPLETELY clear it before typing the real caption.
+   * Uses triple-click (select all in editor) + Delete + insertText.
    */
   async _fillCaption(caption) {
     const cdp = this._cdp;
+    const log = this.log;
 
     // Find and focus the editor
-    await evalPage(cdp, `
-      const editor = document.querySelector('[contenteditable="true"]')
+    const editorSelector = `
+      document.querySelector('[contenteditable="true"]')
         || document.querySelector('.DraftEditor-root [contenteditable]')
         || document.querySelector('.notranslate[contenteditable="true"]')
-        || document.querySelector('[data-testid="caption-editor"] [contenteditable]');
-      if (editor) {
-        editor.focus();
-        editor.click();
-      }
+        || document.querySelector('[data-testid="caption-editor"] [contenteditable]')
+    `;
+
+    await evalPage(cdp, `
+      const editor = ${editorSelector};
+      if (editor) { editor.focus(); editor.click(); }
     `);
     await sleep(500);
 
-    // Select all existing text and delete
-    await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 }); // Ctrl+A
-    await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 });
-    await sleep(100);
-    await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace" });
-    await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace" });
-    await sleep(300);
+    // Clear ALL existing text (TikTok auto-fills filename here)
+    // Method: triple-click to select all + multiple deletes to be thorough
+    for (let i = 0; i < 3; i++) {
+      // Ctrl+A to select all
+      await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 });
+      await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 });
+      await sleep(100);
+      // Delete selected text
+      await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace" });
+      await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace" });
+      await sleep(200);
+    }
 
-    // Type caption using insertText (works with contenteditable + React)
+    // Check if editor is now empty
+    const remaining = await evalPage(cdp, `
+      const editor = ${editorSelector};
+      editor ? editor.textContent?.trim() : '';
+    `);
+    if (remaining) {
+      log(`[TikTok] Editor still has text: "${remaining.slice(0, 30)}...", force-clearing...`);
+      // Force clear via innerHTML
+      await evalPage(cdp, `
+        const editor = ${editorSelector};
+        if (editor) {
+          editor.innerHTML = '';
+          editor.textContent = '';
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      `);
+      await sleep(300);
+      // Re-focus
+      await evalPage(cdp, `
+        const editor = ${editorSelector};
+        if (editor) { editor.focus(); }
+      `);
+      await sleep(200);
+    }
+
+    // Type caption using insertText
     await cdp("Input.insertText", { text: caption });
     await sleep(500);
 
-    // Verify caption was set
+    // Verify
     const setCaptionText = await evalPage(cdp, `
-      const editor = document.querySelector('[contenteditable="true"]')
-        || document.querySelector('.notranslate[contenteditable="true"]');
-      editor ? editor.textContent?.trim()?.slice(0, 50) : '';
+      const editor = ${editorSelector};
+      editor ? editor.textContent?.trim()?.slice(0, 60) : '';
     `);
 
-    if (!setCaptionText) {
-      this.log("[TikTok] ⚠ Caption may not have been set correctly, trying fallback...");
-      // Fallback: direct innerHTML set + dispatch input event
-      const escaped = caption.replace(/'/g, "\\'").replace(/\n/g, "\\n");
+    if (setCaptionText && !setCaptionText.includes(caption.slice(0, 20))) {
+      log(`[TikTok] ⚠ Caption mismatch, got: "${setCaptionText}". Trying fallback...`);
+      // Fallback: set via textContent + events
+      const escaped = caption.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
       await evalPage(cdp, `
-        const editor = document.querySelector('[contenteditable="true"]');
+        const editor = ${editorSelector};
         if (editor) {
           editor.textContent = '${escaped}';
           editor.dispatchEvent(new Event('input', { bubbles: true }));
-          editor.dispatchEvent(new Event('change', { bubbles: true }));
         }
       `);
+    } else if (setCaptionText) {
+      log(`[TikTok] Caption set: "${setCaptionText}..."`);
     } else {
-      this.log(`[TikTok] Caption set: "${setCaptionText}..."`);
+      log(`[TikTok] ⚠ Could not verify caption`);
     }
   }
 
   /**
    * Find and click the Post/Dang button.
+   * Scrolls to bottom first since Post button is below the fold.
    */
   async _clickPost() {
     const cdp = this._cdp;
+
+    // Scroll to bottom to ensure Post button is in viewport
+    await evalPage(cdp, `window.scrollTo(0, document.body.scrollHeight)`);
+    await sleep(1000);
 
     // Try multiple selectors for the post button
     const clicked = await evalPage(cdp, `
       (function() {
         // Try by data-testid
         let btn = document.querySelector('[data-testid="post-button"]');
-        if (btn && !btn.disabled) { btn.click(); return 'data-testid'; }
+        if (btn && !btn.disabled) { btn.scrollIntoView(); btn.click(); return 'data-testid'; }
 
-        // Try by button text
+        // Try by button text — exact match "Post" only
         const buttons = [...document.querySelectorAll('button')];
         const postBtn = buttons.find(b => {
-          const text = b.textContent?.trim()?.toLowerCase();
-          return (text === 'post' || text === 'đăng' || text === 'publish')
+          const text = b.textContent?.trim();
+          return (text === 'Post' || text === 'Đăng' || text === 'Publish')
             && !b.disabled;
         });
-        if (postBtn) { postBtn.click(); return 'text-match'; }
+        if (postBtn) { postBtn.scrollIntoView(); postBtn.click(); return 'text-match'; }
 
         // Try by class
         btn = document.querySelector('[class*="post-button"], [class*="PostButton"]');
-        if (btn && !btn.disabled) { btn.click(); return 'class-match'; }
+        if (btn && !btn.disabled) { btn.scrollIntoView(); btn.click(); return 'class-match'; }
 
         return null;
       })()
@@ -509,25 +587,39 @@ export class TikTokDirectPoster {
 
   /**
    * Wait for post success confirmation.
+   *
+   * After clicking Post, TikTok either:
+   *   a) Redirects to manage/content page (most reliable signal)
+   *   b) Shows a success toast/modal (e.g. "Your video is being uploaded")
+   *   c) Shows the upload page again (ready for next video)
+   *
+   * NOTE: The pre-post page has [class*="success"] for music check — DO NOT
+   * use that as a signal. Only check AFTER the upload form disappears.
    */
   async _waitForPostSuccess(timeout) {
     const start = Date.now();
     const cdp = this._cdp;
+    const uploadPageUrl = "creator#/upload";
 
     while (Date.now() - start < timeout) {
-      // Check multiple success indicators
       const status = await evalPage(cdp, `
         (function() {
-          // URL change to manage page = success
-          if (location.href.includes('/manage') || location.href.includes('/content'))
+          const url = location.href;
+          // URL changed away from upload page = posted successfully
+          if (url.includes('/manage') || url.includes('/content') || url.includes('/post/'))
             return 'redirect';
-          // Success modal/toast
-          if (document.querySelector('[class*="success"], [class*="Success"]'))
-            return 'success-element';
-          // Text indicators
-          const body = document.body?.textContent || '';
-          if (body.includes('successfully') || body.includes('posted') || body.includes('thành công'))
-            return 'text-match';
+          // Upload form is gone (Post button no longer exists) = posted
+          const postBtn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Post');
+          if (!postBtn) {
+            // Check for success toast/text
+            const body = document.body?.textContent || '';
+            if (body.includes('successfully') || body.includes('Your video') ||
+                body.includes('đã được đăng') || body.includes('thành công'))
+              return 'text-match';
+            // Upload form reset (back to "Select video to upload") = posted and ready for next
+            if (body.includes('Select video to upload') || body.includes('Chọn video'))
+              return 'form-reset';
+          }
           return null;
         })()
       `);
