@@ -503,8 +503,8 @@ async function processVideo(rawPath, video) {
 
   let cmd;
   if (voicePath && existsSync(voicePath)) {
-    // Mix: lower original audio (0.15) + voiceover (1.0)
-    cmd = `"${FFMPEG}" -y -i "${rawPath}" -i "${voicePath}" -vf "${vfParts}" -filter_complex "[0:a]volume=0.15[bg];[1:a]volume=1.0[vo];[bg][vo]amix=inputs=2:duration=first:weights=1 1[aout]" -map 0:v -map "[aout]" -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a aac -b:a 128k -t ${maxDuration.toFixed(0)} "${outPath}"`;
+    // Can't use -vf and -filter_complex together — merge everything into filter_complex
+    cmd = `"${FFMPEG}" -y -i "${rawPath}" -i "${voicePath}" -filter_complex "[0:v]${vfParts}[vout];[0:a]volume=0.15[bg];[1:a]volume=1.0[vo];[bg][vo]amix=inputs=2:duration=first:weights=1 1[aout]" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a aac -b:a 128k -t ${maxDuration.toFixed(0)} "${outPath}"`;
   } else {
     // No voiceover — just visual transforms
     cmd = `"${FFMPEG}" -y -i "${rawPath}" -vf "${vfParts}" -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a aac -b:a 128k -t ${maxDuration.toFixed(0)} "${outPath}"`;
