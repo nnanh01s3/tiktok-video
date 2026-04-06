@@ -379,14 +379,49 @@ export class TikTokDirectPoster {
 
     // ── Step 5: Fill caption ──
     log("[TikTok] Step 5: Filling caption...");
+    // Wait extra for TikTok to finish auto-filling filename
+    await sleep(3000);
     await this._fillCaption(caption);
     await sleep(1000);
+
+    // ── Step 5b: Wait for content checks to complete ──
+    log("[TikTok] Step 5b: Waiting for content checks...");
+    for (let i = 0; i < 30; i++) { // max 60s
+      const checkDone = await evalPage(cdp, `
+        const body = document.body?.innerText || '';
+        // Checks complete when we see results (not "checking")
+        const hasResults = body.includes('No issues found') || body.includes('may be restricted');
+        const stillChecking = body.includes('Checking') && !hasResults;
+        !stillChecking;
+      `);
+      if (checkDone) break;
+      await sleep(2000);
+    }
 
     // ── Step 6: Click Post button ──
     log("[TikTok] Step 6: Clicking Post button...");
     const posted = await this._clickPost();
     if (!posted) {
       throw new Error("Could not find or click Post button");
+    }
+
+    // ── Step 6b: Handle "Continue to post?" confirmation dialog ──
+    await sleep(2000);
+    const hasConfirmDialog = await evalPage(cdp, `
+      const body = document.body?.innerText || '';
+      body.includes('Continue to post') || body.includes('copyright check is incomplete');
+    `);
+    if (hasConfirmDialog) {
+      log("[TikTok] Confirming 'Continue to post' dialog...");
+      await evalPage(cdp, `
+        const btns = [...document.querySelectorAll('button')];
+        const confirmBtn = btns.find(b => {
+          const t = b.textContent?.trim();
+          return t === 'Post' || t === 'Continue' || t === 'Post anyway';
+        });
+        if (confirmBtn) confirmBtn.click();
+      `);
+      await sleep(2000);
     }
 
     // ── Step 7: Wait for success ──
@@ -399,8 +434,10 @@ export class TikTokDirectPoster {
     } else {
       // Check for error messages
       const errorText = await evalPage(cdp, `
-        const err = document.querySelector('[class*="error"], [class*="Error"], [role="alert"]');
-        err ? err.textContent?.trim() : null;
+        const body = document.body?.innerText || '';
+        const err = body.match(/Something went wrong[^.]*\\.?/)?.[0]
+          || body.match(/error[^.]*\\.?/i)?.[0];
+        err || null;
       `);
       throw new Error(errorText || "Post confirmation not detected");
     }
