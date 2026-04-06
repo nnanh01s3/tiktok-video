@@ -482,91 +482,67 @@ export class TikTokDirectPoster {
   /**
    * Fill the caption editor with text.
    *
-   * TikTok auto-fills the filename into the editor when a video is uploaded.
-   * We must COMPLETELY clear it before typing the real caption.
-   * Uses triple-click (select all in editor) + Delete + insertText.
+   * TikTok auto-fills the filename into the contenteditable editor.
+   * Problem: Ctrl+A + Backspace sometimes leaves ghost text due to React/DraftJS
+   * virtual DOM not syncing with the real DOM.
+   *
+   * Solution: Use execCommand('selectAll') + execCommand('delete') which properly
+   * triggers React's input handling, then insertText for the new caption.
    */
   async _fillCaption(caption) {
     const cdp = this._cdp;
     const log = this.log;
 
-    // Find and focus the editor
-    const editorSelector = `
-      document.querySelector('[contenteditable="true"]')
-        || document.querySelector('.DraftEditor-root [contenteditable]')
-        || document.querySelector('.notranslate[contenteditable="true"]')
-        || document.querySelector('[data-testid="caption-editor"] [contenteditable]')
-    `;
+    const EDITOR_SEL = `document.querySelector('[contenteditable="true"]') || document.querySelector('.notranslate[contenteditable="true"]')`;
 
-    await evalPage(cdp, `
-      const editor = ${editorSelector};
-      if (editor) { editor.focus(); editor.click(); }
-    `);
+    // Focus editor
+    await evalPage(cdp, `(${EDITOR_SEL})?.focus()`);
     await sleep(500);
 
-    // Clear ALL existing text (TikTok auto-fills filename here)
-    // Method: triple-click to select all + multiple deletes to be thorough
-    for (let i = 0; i < 3; i++) {
-      // Ctrl+A to select all
-      await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 });
-      await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 });
-      await sleep(100);
-      // Delete selected text
-      await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace" });
-      await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace" });
-      await sleep(200);
-    }
-
-    // Check if editor is now empty
-    const remaining = await evalPage(cdp, `
-      const editor = ${editorSelector};
-      editor ? editor.textContent?.trim() : '';
-    `);
-    if (remaining) {
-      log(`[TikTok] Editor still has text: "${remaining.slice(0, 30)}...", force-clearing...`);
-      // Force clear via innerHTML
+    // Clear using execCommand — this properly notifies React/DraftJS
+    // execCommand is deprecated but still works in all browsers and
+    // is the most reliable way to interact with contenteditable + React
+    for (let attempt = 0; attempt < 5; attempt++) {
       await evalPage(cdp, `
-        const editor = ${editorSelector};
-        if (editor) {
-          editor.innerHTML = '';
-          editor.textContent = '';
-          editor.dispatchEvent(new Event('input', { bubbles: true }));
+        const ed = ${EDITOR_SEL};
+        if (ed) {
+          ed.focus();
+          document.execCommand('selectAll', false, null);
+          document.execCommand('delete', false, null);
         }
       `);
       await sleep(300);
-      // Re-focus
-      await evalPage(cdp, `
-        const editor = ${editorSelector};
-        if (editor) { editor.focus(); }
-      `);
-      await sleep(200);
+
+      const remaining = await evalPage(cdp, `(${EDITOR_SEL})?.textContent?.trim()?.length || 0`);
+      if (remaining === 0) break;
+      log(`[TikTok] Clear attempt ${attempt + 1}: ${remaining} chars remaining`);
     }
 
-    // Type caption using insertText
-    await cdp("Input.insertText", { text: caption });
+    // Insert new caption via execCommand('insertText') — triggers React onChange
+    await evalPage(cdp, `
+      const ed = ${EDITOR_SEL};
+      if (ed) {
+        ed.focus();
+        document.execCommand('insertText', false, ${JSON.stringify(caption)});
+      }
+    `);
     await sleep(500);
 
     // Verify
-    const setCaptionText = await evalPage(cdp, `
-      const editor = ${editorSelector};
-      editor ? editor.textContent?.trim()?.slice(0, 60) : '';
-    `);
-
-    if (setCaptionText && !setCaptionText.includes(caption.slice(0, 20))) {
-      log(`[TikTok] ⚠ Caption mismatch, got: "${setCaptionText}". Trying fallback...`);
-      // Fallback: set via textContent + events
-      const escaped = caption.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
-      await evalPage(cdp, `
-        const editor = ${editorSelector};
-        if (editor) {
-          editor.textContent = '${escaped}';
-          editor.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      `);
-    } else if (setCaptionText) {
-      log(`[TikTok] Caption set: "${setCaptionText}..."`);
+    const result = await evalPage(cdp, `(${EDITOR_SEL})?.textContent?.trim()?.slice(0, 80) || ''`);
+    if (result && result.startsWith(caption.slice(0, 15))) {
+      log(`[TikTok] Caption OK: "${result.slice(0, 50)}..."`);
+    } else if (result) {
+      log(`[TikTok] ⚠ Caption got: "${result.slice(0, 50)}" — retrying with Input.insertText`);
+      // Fallback: CDP Input.insertText
+      await evalPage(cdp, `(${EDITOR_SEL})?.focus(); document.execCommand('selectAll'); document.execCommand('delete');`);
+      await sleep(200);
+      await cdp("Input.insertText", { text: caption });
+      await sleep(300);
+      const retry = await evalPage(cdp, `(${EDITOR_SEL})?.textContent?.trim()?.slice(0, 50) || ''`);
+      log(`[TikTok] Caption retry: "${retry}..."`);
     } else {
-      log(`[TikTok] ⚠ Could not verify caption`);
+      log(`[TikTok] ⚠ Caption editor empty after insert`);
     }
   }
 
@@ -626,37 +602,42 @@ export class TikTokDirectPoster {
    * Wait for post success confirmation.
    *
    * After clicking Post, TikTok either:
-   *   a) Redirects to manage/content page (most reliable signal)
-   *   b) Shows a success toast/modal (e.g. "Your video is being uploaded")
-   *   c) Shows the upload page again (ready for next video)
+   *   a) Shows the upload form again with "Select video" (form reset = success)
+   *   b) Redirects to manage/content page
+   *   c) Shows "Your video is being uploaded" text
+   *   d) Post button disappears
    *
-   * NOTE: The pre-post page has [class*="success"] for music check — DO NOT
-   * use that as a signal. Only check AFTER the upload form disappears.
+   * We also check ALL upload tabs — the fresh tab we created may have the
+   * success state while our current CDP connection points to an older tab.
    */
   async _waitForPostSuccess(timeout) {
     const start = Date.now();
     const cdp = this._cdp;
-    const uploadPageUrl = "creator#/upload";
 
     while (Date.now() - start < timeout) {
+      // Check current tab first
       const status = await evalPage(cdp, `
         (function() {
           const url = location.href;
-          // URL changed away from upload page = posted successfully
           if (url.includes('/manage') || url.includes('/content') || url.includes('/post/'))
             return 'redirect';
-          // Upload form is gone (Post button no longer exists) = posted
+
+          const body = document.body?.textContent || '';
           const postBtn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Post');
-          if (!postBtn) {
-            // Check for success toast/text
-            const body = document.body?.textContent || '';
-            if (body.includes('successfully') || body.includes('Your video') ||
-                body.includes('đã được đăng') || body.includes('thành công'))
-              return 'text-match';
-            // Upload form reset (back to "Select video to upload") = posted and ready for next
-            if (body.includes('Select video to upload') || body.includes('Chọn video'))
-              return 'form-reset';
-          }
+
+          // Post button gone + form shows "Select video" = success
+          if (!postBtn && (body.includes('Select video') || body.includes('Chọn video')))
+            return 'form-reset';
+
+          // Post button gone + success text
+          if (!postBtn && (body.includes('successfully') || body.includes('Your video') ||
+              body.includes('thành công') || body.includes('being processed')))
+            return 'text-match';
+
+          // Post button gone but page still loading
+          if (!postBtn && body.length < 100)
+            return null; // still loading, keep waiting
+
           return null;
         })()
       `);
@@ -665,6 +646,38 @@ export class TikTokDirectPoster {
         this.log(`[TikTok] Post confirmed via: ${status}`);
         return true;
       }
+
+      // Also check other upload tabs (new tab may have success state)
+      try {
+        const tabsRes = await fetch(`http://localhost:${this.port}/json`, { signal: AbortSignal.timeout(2000) });
+        const tabs = await tabsRes.json();
+        const uploadTabs = tabs.filter(t => t.type === "page" && t.url.includes("upload"));
+        for (const tab of uploadTabs) {
+          if (tab.webSocketDebuggerUrl === this._ws?.url) continue; // skip current
+          try {
+            const { ws: tmpWs, cdp: tmpCdp } = await openCdp(tab.webSocketDebuggerUrl);
+            const otherStatus = await tmpCdp("Runtime.evaluate", {
+              expression: `
+                (function() {
+                  const body = document.body?.textContent || '';
+                  const postBtn = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Post');
+                  if (!postBtn && (body.includes('Select video') || body.includes('Chọn video')))
+                    return 'form-reset-other-tab';
+                  if (!postBtn && body.includes('wasn\\'t saved'))
+                    return 'form-reset-other-tab';
+                  return null;
+                })()
+              `,
+              returnByValue: true,
+            });
+            tmpWs.close();
+            if (otherStatus?.result?.value) {
+              this.log(`[TikTok] Post confirmed via: ${otherStatus.result.value}`);
+              return true;
+            }
+          } catch {}
+        }
+      } catch {}
 
       await sleep(POLL_INTERVAL);
     }

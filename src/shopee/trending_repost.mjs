@@ -183,74 +183,122 @@ async function withChrome(url, fn, { headless = true, timeout = 30000, profile =
   }
 }
 
-// ── Discovery: TikTok (For You / Trending / Discover) ────────────────────
-// Scrape video trending thực tế từ For You feed hoặc Discover page
-// KHÔNG search theo keyword — lấy video viral tổng hợp tất cả thể loại xã hội
+// ── Discovery: TikTok Explore (requires logged-in Chrome) ─────────────────
+// Explore page requires login to show trending videos.
+// Strategy: try to connect to the existing Chrome on port 9402 (tiktok-direct profile,
+// already logged in as @suutam0405), open a new tab for Explore, scrape, close tab.
+// Fallback: launch Chrome with chrome_tiktok profile (needs manual login first).
 async function discoverTikTok(processedIds) {
-  // Dùng Explore page — grid layout với nhiều video trending
-  // (For You page chỉ render 1 video/lần, không scrape được)
-  const source = { url: "https://www.tiktok.com/explore", name: "Explore/Trending" };
+  log(`🔍 [TikTok] Scraping Explore page...`);
 
-  log(`🔍 [TikTok] Scraping ${source.name} page...`);
+  const cdpPort = CFG.tiktokDirect?.cdpPort || 9402;
+  const EXPLORE_URL = "https://www.tiktok.com/explore";
+
+  // JS expression to extract video data from the Explore grid
+  const EXTRACT_VIDEOS_JS = `
+    JSON.stringify(
+      [...document.querySelectorAll('a[href*="/video/"]')]
+        .reduce((acc, a) => {
+          const m = a.href.match(/\\/video\\/(\\d+)/);
+          if (m && !acc.seen.has(m[1])) {
+            acc.seen.add(m[1]);
+            let desc = "", views = "";
+            let el = a.closest('[class*="item"], [class*="card"], [class*="DivItem"]')
+              || a.parentElement?.parentElement?.parentElement;
+            if (el) {
+              const text = el.innerText || "";
+              desc = text.split("\\n").find(l => l.length > 10 && !l.match(/^\\d/))?.slice(0, 200) || "";
+              const viewMatch = text.match(/(\\d[\\d.]*[KMB]?)\\s*(?:views|lượt xem)?/i);
+              views = viewMatch?.[0] || "";
+            }
+            acc.items.push({ id: m[1], url: a.href.split("?")[0], desc, views });
+          }
+          return acc;
+        }, { seen: new Set(), items: [] })
+        .items.slice(0, 30)
+    )
+  `;
 
   try {
-    const result = await withChrome("about:blank", async (cdp) => {
-      await cdp("Page.navigate", { url: source.url });
-      await sleep(8000);
+    let result = null;
 
-      // Scroll nhiều lần để load thêm video
-      for (let i = 0; i < 5; i++) {
-        await cdp("Runtime.evaluate", {
-          expression: "window.scrollTo(0, document.body.scrollHeight)",
+    // Strategy 1: Connect to existing Chrome on tiktokDirect port (already logged in)
+    try {
+      const r = await fetch(`http://localhost:${cdpPort}/json`, { signal: AbortSignal.timeout(2000) });
+      const tabs = await r.json();
+      if (tabs.some(t => t.type === "page")) {
+        log(`   Using existing Chrome on port ${cdpPort}`);
+        const { default: WS } = await import("ws");
+
+        // Create new tab for Explore
+        const existingTab = tabs.find(t => t.type === "page");
+        const ws = new WS(existingTab.webSocketDebuggerUrl);
+        await new Promise((res, rej) => { ws.on("open", res); ws.on("error", rej); });
+        const cdp = (method, params = {}) => new Promise((res, rej) => {
+          const id = Math.floor(Math.random() * 1e8);
+          const handler = d => { const m = JSON.parse(d.toString()); if (m.id === id) { ws.off("message", handler); res(m.result); } };
+          ws.on("message", handler);
+          ws.send(JSON.stringify({ id, method, params }));
+          setTimeout(() => { ws.off("message", handler); rej(new Error("CDP timeout")); }, 20000);
         });
-        await sleep(2000);
+
+        // Open Explore in new tab
+        const { targetId } = await cdp("Target.createTarget", { url: EXPLORE_URL });
+        await sleep(8000);
+
+        // Connect to the new tab
+        const tabsAfter = await (await fetch(`http://localhost:${cdpPort}/json`)).json();
+        const newTab = tabsAfter.find(t => t.id === targetId);
+        if (newTab?.webSocketDebuggerUrl) {
+          const ws2 = new WS(newTab.webSocketDebuggerUrl);
+          await new Promise(res => ws2.on("open", res));
+          const cdp2 = (method, params = {}) => new Promise((res, rej) => {
+            const id = Math.floor(Math.random() * 1e8);
+            const handler = d => { const m = JSON.parse(d.toString()); if (m.id === id) { ws2.off("message", handler); res(m.result); } };
+            ws2.on("message", handler);
+            ws2.send(JSON.stringify({ id, method, params }));
+            setTimeout(() => { ws2.off("message", handler); rej(new Error("CDP timeout")); }, 15000);
+          });
+
+          // Scroll to load videos
+          for (let i = 0; i < 4; i++) {
+            await cdp2("Runtime.evaluate", { expression: "window.scrollTo(0, document.body.scrollHeight)" });
+            await sleep(2000);
+          }
+
+          const evalResult = await cdp2("Runtime.evaluate", { expression: EXTRACT_VIDEOS_JS, returnByValue: true });
+          result = evalResult?.result?.value;
+
+          // Close the Explore tab
+          try { await cdp("Target.closeTarget", { targetId }); } catch {}
+          ws2.close();
+        }
+        ws.close();
       }
+    } catch {
+      // Chrome not running on that port
+    }
 
-      // Extract video links + metadata từ feed
-      const evalResult = await cdp("Runtime.evaluate", {
-        expression: `
-          JSON.stringify(
-            [...document.querySelectorAll('a[href*="/video/"]')]
-              .reduce((acc, a) => {
-                const m = a.href.match(/\\/video\\/(\\d+)/);
-                if (m && !acc.seen.has(m[1])) {
-                  acc.seen.add(m[1]);
-                  // Tìm container để lấy description + views
-                  let desc = "", views = "";
-                  let el = a.closest('[class*="item"], [class*="card"], [class*="DivItem"]')
-                    || a.parentElement?.parentElement?.parentElement;
-                  if (el) {
-                    const text = el.innerText || "";
-                    // Lấy dòng đầu làm description
-                    desc = text.split("\\n").find(l => l.length > 10 && !l.match(/^\\d/))?.slice(0, 200) || "";
-                    // Tìm view count (123.4K, 1.2M, etc)
-                    const viewMatch = text.match(/(\\d[\\d.]*[KMB]?)\\s*(?:views|lượt xem)?/i);
-                    views = viewMatch?.[0] || "";
-                  }
-                  acc.items.push({
-                    id: m[1],
-                    url: a.href.split("?")[0],
-                    desc,
-                    views,
-                  });
-                }
-                return acc;
-              }, { seen: new Set(), items: [] })
-              .items.slice(0, 30)
-          )
-        `,
-        returnByValue: true,
-      });
-
-      return evalResult?.result?.value;
-    }, { headless: false, timeout: 30000, profile: CHROME_TIKTOK_PROFILE });
+    // Strategy 2: Fallback — launch Chrome with TikTok profile (may need login)
+    if (!result) {
+      log(`   Fallback: launching Chrome with TikTok profile...`);
+      result = await withChrome("about:blank", async (cdp) => {
+        await cdp("Page.navigate", { url: EXPLORE_URL });
+        await sleep(8000);
+        for (let i = 0; i < 4; i++) {
+          await cdp("Runtime.evaluate", { expression: "window.scrollTo(0, document.body.scrollHeight)" });
+          await sleep(2000);
+        }
+        const evalResult = await cdp("Runtime.evaluate", { expression: EXTRACT_VIDEOS_JS, returnByValue: true });
+        return evalResult?.result?.value;
+      }, { headless: false, timeout: 30000, profile: CFG.tiktokDirect?.chromeProfile || CHROME_TIKTOK_PROFILE });
+    }
 
     if (!result) return [];
 
     const items = JSON.parse(result);
-    log(`   Tìm thấy ${items.length} video từ ${source.name}`);
+    log(`   Tìm thấy ${items.length} video`);
 
-    // Parse view count để sort
     function parseViews(v) {
       if (!v) return 0;
       const m = v.match(/([\d.]+)\s*(M|K|B)?/i);
