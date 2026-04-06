@@ -7,11 +7,8 @@
 
 // ── PostFast Social Media IDs ──────────────────────────────────────────────
 // These come from PostFast dashboard → Connected Accounts
-export const POSTFAST_KEY = process.env.POSTFAST_API_KEY;
-if (!POSTFAST_KEY) {
-  console.error("POSTFAST_API_KEY not set in environment. Add it to config/.env");
-  process.exit(1);
-}
+// PostFast API key — optional (not needed for TikTok Direct posting)
+export const POSTFAST_KEY = process.env.POSTFA_API_KEY || process.env.POSTFAST_API_KEY || "";
 
 export const TIKTOK_ACCOUNT = "cc7c3ff7-3697-4f2f-aec1-7a044daae4b6";
 
