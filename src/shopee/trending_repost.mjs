@@ -187,14 +187,9 @@ async function withChrome(url, fn, { headless = true, timeout = 30000, profile =
 // Scrape video trending thực tế từ For You feed hoặc Discover page
 // KHÔNG search theo keyword — lấy video viral tổng hợp tất cả thể loại xã hội
 async function discoverTikTok(processedIds) {
-  // Xoay vòng giữa các source trending:
-  // - /foryou: feed cá nhân (thuật toán đề xuất)
-  // - /explore: trending/discover (video phổ biến hiện tại)
-  const sources = [
-    { url: "https://www.tiktok.com/explore", name: "Explore/Trending" },
-    { url: "https://www.tiktok.com/foryou", name: "For You" },
-  ];
-  const source = sources[Math.floor(Math.random() * sources.length)];
+  // Dùng Explore page — grid layout với nhiều video trending
+  // (For You page chỉ render 1 video/lần, không scrape được)
+  const source = { url: "https://www.tiktok.com/explore", name: "Explore/Trending" };
 
   log(`🔍 [TikTok] Scraping ${source.name} page...`);
 
