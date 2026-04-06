@@ -87,16 +87,10 @@ export const TRENDING_CONFIG = {
     cdpPort: 9402,                    // Chrome CDP port (tránh xung đột 9399-9401)
     chromeProfile: "D:/tiktok/data/tiktok/chrome_profile",
   },
-  // Từ khóa tìm video trending (rotate mỗi lần chạy)
-  tiktokKeywords: [
-    "hàng độc lạ", "đồ gia dụng thông minh", "sản phẩm hay",
-    "review đồ shopee", "đồ công nghệ hay", "đồ bếp thông minh",
-    "phát minh hay", "sản phẩm tiktok", "đồ lạ trung quốc",
-  ],
-  fbWatchKeywords: [
-    "đồ gia dụng thông minh", "hàng độc lạ", "sản phẩm hay ho",
-    "review shopee", "đồ công nghệ", "phát minh sáng tạo",
-  ],
+  // Không dùng keyword nữa — scrape trực tiếp từ For You / Explore / FB Watch
+  // Giữ lại để backward compatible (không dùng trong trending flow mới)
+  tiktokKeywords: [],
+  fbWatchKeywords: [],
   // Khung giờ vàng Vietnam (giờ bắt đầu)
   goldenHours: [7, 11, 17, 20],
   maxPerDay: 5,

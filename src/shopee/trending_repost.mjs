@@ -183,32 +183,35 @@ async function withChrome(url, fn, { headless = true, timeout = 30000, profile =
   }
 }
 
-// ── Discovery: TikTok (Chrome CDP search) ────────────────────────────────
+// ── Discovery: TikTok (For You / Trending / Discover) ────────────────────
+// Scrape video trending thực tế từ For You feed hoặc Discover page
+// KHÔNG search theo keyword — lấy video viral tổng hợp tất cả thể loại xã hội
 async function discoverTikTok(processedIds) {
-  const keywords = CFG.tiktokKeywords;
-  const keyword = keywords[Math.floor(Math.random() * keywords.length)];
-  // search_filter_date: 0=all, 1=tuần này, 7=tháng này, 180=6 tháng
-  // search_filter_sort: 0=relevance, 1=likes
-  const searchUrl = `https://www.tiktok.com/search/video?q=${encodeURIComponent(keyword)}&search_filter_date=1&search_filter_sort=1`;
+  // Xoay vòng giữa các source trending:
+  // - /foryou: feed cá nhân (thuật toán đề xuất)
+  // - /explore: trending/discover (video phổ biến hiện tại)
+  const sources = [
+    { url: "https://www.tiktok.com/explore", name: "Explore/Trending" },
+    { url: "https://www.tiktok.com/foryou", name: "For You" },
+  ];
+  const source = sources[Math.floor(Math.random() * sources.length)];
 
-  log(`🔍 [TikTok] Search: "${keyword}"`);
+  log(`🔍 [TikTok] Scraping ${source.name} page...`);
 
   try {
-    // Dùng chrome_tiktok profile (có cookies), navigate via CDP
     const result = await withChrome("about:blank", async (cdp) => {
-      // Navigate qua CDP (tránh Chrome mở intro page)
-      await cdp("Page.navigate", { url: searchUrl });
-      await sleep(10000);
+      await cdp("Page.navigate", { url: source.url });
+      await sleep(8000);
 
-      // Scroll để load thêm
-      for (let i = 0; i < 3; i++) {
+      // Scroll nhiều lần để load thêm video
+      for (let i = 0; i < 5; i++) {
         await cdp("Runtime.evaluate", {
           expression: "window.scrollTo(0, document.body.scrollHeight)",
         });
         await sleep(2000);
       }
 
-      // Extract video links + view counts
+      // Extract video links + metadata từ feed
       const evalResult = await cdp("Runtime.evaluate", {
         expression: `
           JSON.stringify(
@@ -217,64 +220,50 @@ async function discoverTikTok(processedIds) {
                 const m = a.href.match(/\\/video\\/(\\d+)/);
                 if (m && !acc.seen.has(m[1])) {
                   acc.seen.add(m[1]);
+                  // Tìm container để lấy description + views
+                  let desc = "", views = "";
+                  let el = a.closest('[class*="item"], [class*="card"], [class*="DivItem"]')
+                    || a.parentElement?.parentElement?.parentElement;
+                  if (el) {
+                    const text = el.innerText || "";
+                    // Lấy dòng đầu làm description
+                    desc = text.split("\\n").find(l => l.length > 10 && !l.match(/^\\d/))?.slice(0, 200) || "";
+                    // Tìm view count (123.4K, 1.2M, etc)
+                    const viewMatch = text.match(/(\\d[\\d.]*[KMB]?)\\s*(?:views|lượt xem)?/i);
+                    views = viewMatch?.[0] || "";
+                  }
                   acc.items.push({
                     id: m[1],
                     url: a.href.split("?")[0],
-                    views: (a.innerText || "").trim(),
+                    desc,
+                    views,
                   });
                 }
                 return acc;
               }, { seen: new Set(), items: [] })
-              .items.slice(0, 20)
+              .items.slice(0, 30)
           )
         `,
         returnByValue: true,
       });
 
-      // Lấy description từ các tag links gần video links
-      const descResult = await cdp("Runtime.evaluate", {
-        expression: `
-          JSON.stringify(
-            [...document.querySelectorAll('a[href*="/video/"]')]
-              .reduce((acc, a) => {
-                const m = a.href.match(/\\/video\\/(\\d+)/);
-                if (!m || acc.seen.has(m[1])) return acc;
-                acc.seen.add(m[1]);
-                // Tìm container cha chứa description
-                let el = a.parentElement;
-                for (let i = 0; i < 5 && el; i++) {
-                  const text = el.innerText || "";
-                  if (text.length > 20 && text.length < 500) {
-                    acc.descs[m[1]] = text.split("\\n")[0].slice(0, 150);
-                    break;
-                  }
-                  el = el.parentElement;
-                }
-                return acc;
-              }, { seen: new Set(), descs: {} })
-              .descs
-          )
-        `,
-        returnByValue: true,
-      });
+      return evalResult?.result?.value;
+    }, { headless: false, timeout: 30000, profile: CHROME_TIKTOK_PROFILE });
 
-      return { items: evalResult?.result?.value, descs: descResult?.result?.value };
-    }, { headless: false, timeout: 25000, profile: CHROME_TIKTOK_PROFILE });
+    if (!result) return [];
 
-    if (!result?.items) return [];
-
-    const items = JSON.parse(result.items);
-    const descs = result.descs ? JSON.parse(result.descs) : {};
-    log(`   Tìm thấy ${items.length} video`);
+    const items = JSON.parse(result);
+    log(`   Tìm thấy ${items.length} video từ ${source.name}`);
 
     // Parse view count để sort
     function parseViews(v) {
       if (!v) return 0;
-      const m = v.match(/([\d.]+)\s*(M|K)?/i);
+      const m = v.match(/([\d.]+)\s*(M|K|B)?/i);
       if (!m) return parseInt(v.replace(/\D/g, "")) || 0;
       const num = parseFloat(m[1]);
       if (m[2]?.toUpperCase() === "M") return num * 1_000_000;
       if (m[2]?.toUpperCase() === "K") return num * 1_000;
+      if (m[2]?.toUpperCase() === "B") return num * 1_000_000_000;
       return num;
     }
 
@@ -283,13 +272,13 @@ async function discoverTikTok(processedIds) {
         id: v.id,
         fullId: `tiktok:${v.id}`,
         url: v.url,
-        title: descs[v.id] || keyword,
+        title: v.desc || "Trending video",
         views: v.views,
         viewCount: parseViews(v.views),
         platform: "tiktok",
       }))
       .filter(v => !processedIds.includes(v.fullId))
-      .sort((a, b) => b.viewCount - a.viewCount); // Sort views cao nhất trước
+      .sort((a, b) => b.viewCount - a.viewCount);
 
     log(`   ${videos.length} video mới (top: ${videos[0]?.views || "N/A"} views)`);
     return videos;
@@ -299,16 +288,20 @@ async function discoverTikTok(processedIds) {
   }
 }
 
-// ── Discovery: Facebook Watch/Reels ──────────────────────────────────────
+// ── Discovery: Facebook Watch/Reels (viral tổng hợp) ─────────────────────
+// Scrape Facebook Watch (popular videos) hoặc Reels — lấy viral tổng hợp
 async function discoverFacebook(processedIds) {
-  const keywords = CFG.fbWatchKeywords;
-  const keyword = keywords[Math.floor(Math.random() * keywords.length)];
-  const searchUrl = `https://www.facebook.com/search/videos?q=${encodeURIComponent(keyword)}`;
+  const sources = [
+    "https://www.facebook.com/watch/",
+    "https://www.facebook.com/reel/",
+    "https://www.facebook.com/watch/popular",
+  ];
+  const sourceUrl = sources[Math.floor(Math.random() * sources.length)];
 
-  log(`🔍 [Facebook] Search: "${keyword}"`);
+  log(`🔍 [Facebook] Scraping: ${sourceUrl}`);
 
   try {
-    const result = await withChrome(searchUrl, async (cdp) => {
+    const result = await withChrome(sourceUrl, async (cdp) => {
       await sleep(6000);
       for (let i = 0; i < 4; i++) {
         await cdp("Runtime.evaluate", {
