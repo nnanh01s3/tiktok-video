@@ -11,9 +11,10 @@
  *  1. Chrome headless CDP → scrape video IDs từ FB page
  *  2. yt-dlp → download video
  *  3. Claude Haiku → viết caption giải trí (không quảng cáo)
- *  4. PostFast → upload + schedule lên FB & TikTok
+ *  4. social-poster → upload + schedule lên FB (PostFast or PostForMe)
  */
 
+import "../env.js";
 import { spawnSync, spawn } from "child_process";
 import {
   writeFileSync, readFileSync, mkdirSync,

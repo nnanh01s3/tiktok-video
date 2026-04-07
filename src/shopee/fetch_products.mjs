@@ -187,17 +187,22 @@ const unique = allProducts.filter(p => {
   return true;
 });
 
-// Save cache
-const cache = {
-  fetchedAt: new Date().toISOString(),
-  totalRaw: allProducts.length,
-  totalUnique: unique.length,
-  categories: catFilter,
-  products: unique,
-};
-writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
-console.log(`\n${"=".repeat(50)}`);
-console.log(`✅ Saved ${unique.length} unique products → ${CACHE_FILE}`);
+// Save cache — only if we actually got products (don't overwrite good cache with empty)
+if (unique.length > 0) {
+  const cache = {
+    fetchedAt: new Date().toISOString(),
+    totalRaw: allProducts.length,
+    totalUnique: unique.length,
+    categories: catFilter,
+    products: unique,
+  };
+  writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
+  console.log(`\n${"=".repeat(50)}`);
+  console.log(`✅ Saved ${unique.length} unique products → ${CACHE_FILE}`);
+} else {
+  console.log(`\n${"=".repeat(50)}`);
+  console.log(`⚠️ 0 products fetched — keeping existing cache (not overwriting)`);
+}
 
 // Cleanup
 try { ws.close(); } catch {}
