@@ -204,13 +204,14 @@ function closeCdpBrowser() {
 // Or manually: save API responses to CACHE_FILE via browser DevTools.
 
 const CACHE_FILE = "D:/tiktok/data/shopee/products_cache.json";
-const CACHE_MAX_AGE = 4 * 60 * 60 * 1000; // 4 hours
+const CACHE_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours (was 4h — too aggressive)
 
-function readCache() {
+function readCache(ignoreAge = false) {
   if (!existsSync(CACHE_FILE)) return null;
   try {
     const cache = JSON.parse(readFileSync(CACHE_FILE, "utf8"));
-    if (Date.now() - new Date(cache.fetchedAt).getTime() > CACHE_MAX_AGE) return null;
+    if (!ignoreAge && Date.now() - new Date(cache.fetchedAt).getTime() > CACHE_MAX_AGE) return null;
+    if (!cache.products?.length) return null; // empty cache = useless
     return cache;
   } catch { return null; }
 }
@@ -471,17 +472,26 @@ export class ShopeeAffiliate {
       usedCache = true;
     }
 
-    // Fallback: try API nếu cache hết hạn hoặc không có
+    // Fallback 1: try API if cache missed/expired
     if (allProducts.length === 0 && !usedCache) {
       try {
         if (!this.isReady()) throw new Error("no cookies");
         allProducts = await this._fetchFromApi({ usedIds, categoriesPerRun, productsPerCat, minCommission, videoOnly, categoryIds, log });
       } catch {
-        log("❌ API cũng fail, không có sản phẩm.");
+        // Fallback 2: read expired cache (better than nothing)
+        const staleCache = readCache(true); // ignoreAge = true
+        if (staleCache) {
+          log("📦 API fail → đọc cache cũ (expired)...");
+          const products = staleCache.products.map(item => parseProduct(item, "cache-stale"));
+          allProducts = products.filter(
+            p => !usedIds.includes(p.itemId) && p.affiliateLink &&
+                 p.commissionRate >= minCommission && (!videoOnly || p.hasVideo)
+          ).sort(() => Math.random() - 0.5).slice(0, categoriesPerRun * productsPerCat);
+        } else {
+          log("❌ API fail + không có cache, 0 sản phẩm.");
+        }
       }
     }
-
-    // (cache đã được đọc ở trên, không cần fallback thêm)
 
     log(`   📊 Tổng: ${allProducts.length} sản phẩm${usedCache ? " (từ cache)" : ""}${videoOnly ? " (có video + hoa hồng)" : ""}`);
     return allProducts;
