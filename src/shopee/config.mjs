@@ -76,8 +76,8 @@ export const PAGES = {
   sac_dep: {
     name: "Mỹ Phẩm Giá Tốt",
     provider: "postforme",
-    fbId: null,
-    pfmId: null, // TODO: add after creating FB page + connecting PostForMe
+    fbId: "61574308417146", // facebook.com/profile.php?id=61574308417146
+    pfmId: null, // TODO: connect PostForMe → copy account ID here
     ttId: null,
     categories: SHOPEE_CATEGORIES.sac_dep,
     caption: { platform: "facebook", niche: "mỹ phẩm làm đẹp Shopee", pageName: "Mỹ Phẩm Giá Tốt" },
@@ -87,8 +87,8 @@ export const PAGES = {
   thoi_trang: {
     name: "Thời Trang & Phụ Kiện",
     provider: "postforme",
-    fbId: null,
-    pfmId: null,
+    fbId: "61572115822435", // facebook.com/profile.php?id=61572115822435
+    pfmId: null, // TODO: connect PostForMe → copy account ID here
     ttId: null,
     categories: SHOPEE_CATEGORIES.thoi_trang,
     caption: { platform: "facebook", niche: "thời trang phụ kiện Shopee", pageName: "Thời Trang & Phụ Kiện" },
