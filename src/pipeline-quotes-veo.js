@@ -30,7 +30,8 @@ import { writeScript, writeDirectorScript } from "./script-writer.js";
 import { generateVoiceover } from "./tts.js";
 import { generateVideo, buildScenePrompts, pickAvailableModel } from "./veo.js";
 import { generateImage } from "./imagen.js";
-import { uploadVideo, schedulePost, getTikTokAccounts } from "./postfast.js";
+import { createPoster } from "./social-poster.js";
+import { PAGES } from "./shopee/config.mjs";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const STEP = process.argv.find((a) => a.startsWith("--step="))?.split("=")[1];
@@ -809,15 +810,15 @@ export async function runPipeline(opts = {}) {
   log("Step 6: Uploading to PostFast...");
   updateVideoStatus(jobId, "uploading");
 
-  const accounts = await getTikTokAccounts();
-  if (accounts.length === 0) {
-    log("ERROR: No TikTok accounts connected in PostFast");
+  const quotePoster = createPoster(PAGES.shopee); // TikTok quotes → "Sưu Tầm Hàng Dị" page
+  if (!quotePoster.getTikTokId()) {
+    log("ERROR: No TikTok account configured for quotes pipeline");
     updateVideoStatus(jobId, "failed");
     return { success: false, error: "no_tiktok_account" };
   }
 
-  const videoKey = await uploadVideo(videoPath);
-  log(`Uploaded: ${videoKey}`);
+  const mediaRef = await quotePoster.upload(videoPath);
+  log(`Uploaded: ${mediaRef.slice(0, 60)}`);
 
   const hashtags = pickHashtags();
 
@@ -839,19 +840,19 @@ export async function runPipeline(opts = {}) {
   const caption = `${scriptResult.caption}${authorCredits}\n\n${hashtags.join(" ")}`;
   const scheduledAt = new Date(Date.now() + 60_000).toISOString();
 
-  const postResult = await schedulePost({
-    socialMediaId: accounts[0].id,
-    videoKey,
+  const postResult = await quotePoster.scheduleTikTok({
+    mediaRef,
     caption,
     scheduledAt,
   });
 
-  log(`Scheduled: post ${postResult.postIds[0]} at ${scheduledAt}`);
+  const postId = postResult.postId || postResult.postIds?.[0];
+  log(`Scheduled: post ${postId} at ${scheduledAt}`);
 
   // --- Step 7: Cleanup & tracking ---
   markQuotesUsed(quotes.map((q) => q.id));
   updateVideoStatus(jobId, "posted", {
-    tiktok_post_id: postResult.postIds[0],
+    tiktok_post_id: postId,
     caption,
     hashtags: JSON.stringify(hashtags),
     posted_at: new Date().toISOString(),
@@ -871,7 +872,7 @@ export async function runPipeline(opts = {}) {
   return {
     success: true,
     jobId,
-    postId: postResult.postIds[0],
+    postId,
     videoPath,
     duration: videoResult.duration,
     category,

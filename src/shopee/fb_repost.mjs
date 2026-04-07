@@ -289,71 +289,23 @@ function makeCaption(title, desc) {
   return `${hook}\n\n"${content}"\n\nBạn nghĩ sao? Comment bên dưới nhé!\n\n#suutamhangdi #hangdi #kyla #docla #viral #fyp #trending`;
 }
 
-// ── Step 4: Upload & Post via PostFast ────────────────────────────────────
-async function uploadAndPost(videoPath, caption, delayMinutes = 1, postToTikTok = false) {
-  // Get signed upload URL
-  let r = await fetch("https://api.postfa.st/file/get-signed-upload-urls", {
-    method: "POST", headers: PF_HEADERS,
-    body: JSON.stringify({ contentType: "video/mp4", count: 1 }),
-    signal: AbortSignal.timeout(30000),
-  });
-  const [{ key: videoKey, signedUrl: uploadUrl }] = await r.json();
+// ── Step 4: Upload & Post via social-poster ──────────────────────────────
+import { createPoster } from "../social-poster.js";
+import { PAGES } from "./config.mjs";
+const fbRepostPoster = createPoster(PAGES.shopee); // fb_repost posts to "Sưu Tầm Hàng Dị"
 
-  // Upload video
-  const videoData = readFileSync(videoPath);
-  r = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": "video/mp4" },
-    body: videoData,
-    signal: AbortSignal.timeout(300000),
-  });
-  if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
-  log(`   ✅ Uploaded: ${videoKey}`);
+async function uploadAndPost(videoPath, caption, delayMinutes = 1) {
+  const mediaRef = await fbRepostPoster.upload(videoPath);
+  log(`   ✅ Uploaded: ${mediaRef.slice(0, 60)}`);
 
-  const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000)
+  const scheduledAt = new Date(Date.now() + delayMinutes * 60_000)
     .toISOString().replace(/\.\d{3}Z$/, ".000Z");
 
-  // Post to Facebook
-  r = await fetch("https://api.postfa.st/social-posts", {
-    method: "POST", headers: PF_HEADERS,
-    body: JSON.stringify({
-      posts: [{
-        content: caption,
-        scheduledAt,
-        socialMediaId: FB_PAGE_ID,
-        mediaItems: [{ key: videoKey, type: "VIDEO", sortOrder: 0 }],
-      }],
-      controls: { facebookContentType: "REEL" },
-    }),
-    signal: AbortSignal.timeout(30000),
-  });
-  const result = await r.json();
-  if (!r.ok) throw new Error(`Post failed: ${JSON.stringify(result)}`);
-  log(`   ✅ FB Scheduled: ${scheduledAt} | PostID: ${result.postIds?.[0]}`);
+  const result = await fbRepostPoster.scheduleFacebook({ mediaRef, caption, scheduledAt });
+  const postId = result.postId || result.postIds?.[0];
+  log(`   ✅ FB Scheduled: ${scheduledAt} | PostID: ${postId}`);
 
-  // Post to TikTok — TẠM TẮT, chỉ dùng FB
-  // if (postToTikTok) {
-  //   try {
-  //     const scheduledTT = new Date(Date.now() + (delayMinutes + 5) * 60 * 1000)
-  //       .toISOString().replace(/\.\d{3}Z$/, ".000Z");
-  //     const rtk = await fetch("https://api.postfa.st/social-posts", {
-  //       method: "POST", headers: PF_HEADERS,
-  //       body: JSON.stringify({
-  //         posts: [{
-  //           content: caption, scheduledAt: scheduledTT,
-  //           socialMediaId: TIKTOK_ACCOUNT,
-  //           mediaItems: [{ key: videoKey, type: "VIDEO", sortOrder: 0 }],
-  //         }],
-  //         controls: { tiktokPrivacy: "PUBLIC", tiktokAllowComments: true, tiktokAllowDuet: true },
-  //       }),
-  //       signal: AbortSignal.timeout(30000),
-  //     });
-  //     const rtkRes = await rtk.json();
-  //     if (rtk.ok) log(`   ✅ TikTok Scheduled: ${scheduledTT} | ID: ${rtkRes.postIds?.[0]}`);
-  //   } catch (e) { log(`   ⚠️ TikTok post failed: ${e.message}`); }
-  // }
-
-  return result.postIds?.[0];
+  return postId;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────

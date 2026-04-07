@@ -237,93 +237,59 @@ async function processVideo(rawPath, product) {
   return null;
 }
 
-// ── Step 4: Upload + Post via PostFast ─────────────────────────────────────
+// ── Step 4: Upload + Post via social-poster (PostFast or PostForMe) ───────
+import { createPoster } from "../social-poster.js";
+const poster = createPoster(PAGE);
+
 async function appendAffLink(caption, product) {
   if (!product?.affiliateLink) return caption;
   const shortLink = await shortenUrl(product.affiliateLink);
   return `${caption}\n\n🛒 Mua ngay: ${shortLink}`;
 }
 
-async function uploadToPostFast(videoPath) {
-  const r = await fetch("https://api.postfa.st/file/get-signed-upload-urls", {
-    method: "POST",
-    headers: PF_HEADERS,
-    body: JSON.stringify({ contentType: "video/mp4", count: 1 }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const [{ key: videoKey, signedUrl }] = await r.json();
-
-  const data = readFileSync(videoPath);
-  const up = await fetch(signedUrl, {
-    method: "PUT",
-    headers: { "Content-Type": "video/mp4" },
-    body: data,
-    signal: AbortSignal.timeout(300_000),
-  });
-  if (!up.ok) throw new Error(`Upload failed: ${up.status}`);
-  log(`   ✅ Uploaded: ${videoKey}`);
-  return videoKey;
-}
-
-async function schedulePost(videoKey, caption, socialMediaId, controls = {}, delayMinutes = 1) {
-  const scheduledAt = new Date(Date.now() + delayMinutes * 60_000).toISOString().replace(/\.\d{3}Z$/, ".000Z");
-  const r = await fetch("https://api.postfa.st/social-posts", {
-    method: "POST",
-    headers: PF_HEADERS,
-    body: JSON.stringify({
-      posts: [{ content: caption, scheduledAt, socialMediaId, mediaItems: [{ key: videoKey, type: "VIDEO", sortOrder: 0 }] }],
-      controls: { tiktokPrivacy: "PUBLIC", tiktokAllowComments: true, tiktokAllowDuet: true, tiktokAllowStitch: true, ...controls },
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const res = await r.json();
-  if (!r.ok) throw new Error(`PostFast error: ${JSON.stringify(res)}`);
-  return res.postIds?.[0];
-}
-
 async function postVideo(videoPath, caption, product, slotIdx) {
-  const videoKey = await uploadToPostFast(videoPath);
+  const mediaRef = await poster.upload(videoPath);
+  log(`   ✅ Uploaded: ${mediaRef.slice(0, 60)}`);
+
   const captionWithLink = await appendAffLink(caption, product);
-  const delay = BASE_DELAY + slotIdx * POST_INTERVAL; // stagger per video
+  const delay = BASE_DELAY + slotIdx * POST_INTERVAL;
+  const scheduledAt = new Date(Date.now() + delay * 60_000).toISOString().replace(/\.\d{3}Z$/, ".000Z");
   const results = {};
 
   log(`   🕐 Schedule sau ${delay} phút`);
 
-  // Post to TikTok — TẠM TẮT, chỉ dùng FB
-  // if (PAGE.ttId) {
-  //   try {
-  //     results.ttPostId = await schedulePost(videoKey, captionWithLink, PAGE.ttId, {}, delay);
-  //     log(`   ✅ TikTok scheduled | ID: ${results.ttPostId}`);
-  //   } catch (e) { log(`   ⚠️ TikTok failed: ${e.message?.slice(0, 80)}`); }
-  // }
-
-  // Post to Facebook Reel (if configured)
-  if (PAGE.fbId) {
+  // Post to Facebook Reel
+  if (poster.getFacebookId()) {
     try {
-      results.fbPostId = await schedulePost(videoKey, captionWithLink, PAGE.fbId, { facebookContentType: "REEL" }, delay);
+      const fbResult = await poster.scheduleFacebook({ mediaRef, caption: captionWithLink, scheduledAt });
+      results.fbPostId = fbResult.postId || fbResult.postIds?.[0];
       log(`   ✅ Facebook scheduled | ID: ${results.fbPostId}`);
     } catch (e) { log(`   ⚠️ Facebook failed: ${e.message?.slice(0, 80)}`); }
   }
 
-  // Affiliate comment with short link (if enabled and post succeeded)
-  if (PAGE.postComments && product?.affiliateLink) {
+  // Post to TikTok (if configured)
+  if (poster.getTikTokId()) {
+    try {
+      const ttSchedule = new Date(new Date(scheduledAt).getTime() + 5 * 60_000).toISOString();
+      const ttResult = await poster.scheduleTikTok({ mediaRef, caption: captionWithLink, scheduledAt: ttSchedule });
+      results.ttPostId = ttResult?.postId || ttResult?.postIds?.[0];
+      log(`   ✅ TikTok scheduled | ID: ${results.ttPostId}`);
+    } catch (e) { log(`   ⚠️ TikTok failed: ${e.message?.slice(0, 80)}`); }
+  }
+
+  // Affiliate comment (PostFast only, 60 min after post)
+  if (PAGE.postComments && product?.affiliateLink && results.fbPostId) {
     const shortLink = await shortenUrl(product.affiliateLink);
     const comment = `MUA NGAY TẠI ĐÂY👇👇👇\n${shortLink}\n${shortLink}`;
-    const delay = 60 * 60_000; // 60 phút sau khi post
+    const commentDelay = 60 * 60_000;
     const timer = setTimeout(async () => {
-      for (const postId of [results.fbPostId, results.ttPostId].filter(Boolean)) {
-        try {
-          await fetch(`https://api.postfa.st/social-posts/${postId}/comments`, {
-            method: "POST", headers: PF_HEADERS,
-            body: JSON.stringify({ content: comment }),
-            signal: AbortSignal.timeout(15_000),
-          });
-          log(`   💬 Comment posted: ${postId}`);
-        } catch {}
-      }
-    }, delay);
-    timer.unref(); // Cho phép process exit mà không chờ timer
-    log(`   🕐 Comment sẽ gửi sau ${Math.round(delay / 60000)} phút`);
+      try {
+        await poster.postComment(results.fbPostId, comment);
+        log(`   💬 Comment posted: ${results.fbPostId}`);
+      } catch {}
+    }, commentDelay);
+    timer.unref();
+    log(`   🕐 Comment sẽ gửi sau 60 phút`);
   }
 
   return results;
@@ -358,6 +324,13 @@ if (!products.length) {
 
 const toProcess = products.slice(0, slot);
 log(`📌 Xử lý ${toProcess.length} sản phẩm\n`);
+
+// Check if page has a valid posting account configured
+if (!poster.getFacebookId() && !poster.getTikTokId()) {
+  log(`⚠️ Page "${PAGE.name}" has no posting accounts configured yet. Skipping.`);
+  log(`   Set pfmId in config.mjs after creating FB page + connecting PostForMe.`);
+  process.exit(0);
+}
 
 let captionHistory = loadCaptionHistory();
 let success = 0;

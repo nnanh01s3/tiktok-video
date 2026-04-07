@@ -672,46 +672,26 @@ function getNextGoldenSlot(slotIndex) {
   return utcTime.toISOString().replace(/\.\d{3}Z$/, ".000Z");
 }
 
-// ── Upload + Post via PostFast ───────────────────────────────────────────
-async function uploadAndPost(videoPath, caption, scheduledAt) {
-  // Upload
-  let r = await fetch("https://api.postfa.st/file/get-signed-upload-urls", {
-    method: "POST", headers: PF_HEADERS,
-    body: JSON.stringify({ contentType: "video/mp4", count: 1 }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const [{ key: videoKey, signedUrl }] = await r.json();
+// ── Upload + Post via social-poster ─────────────────────────────────────
+import { createPoster } from "../social-poster.js";
+import { PAGES } from "./config.mjs";
+const trendingPoster = createPoster(PAGES.shopee); // trending posts to "Sưu Tầm Hàng Dị"
 
-  const data = readFileSync(videoPath);
-  r = await fetch(signedUrl, {
-    method: "PUT",
-    headers: { "Content-Type": "video/mp4" },
-    body: data,
-    signal: AbortSignal.timeout(300_000),
-  });
-  if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
-  log(`   ✅ Uploaded: ${videoKey}`);
+async function uploadAndPost(videoPath, caption, scheduledAt) {
+  const mediaRef = await trendingPoster.upload(videoPath);
+  log(`   ✅ Uploaded: ${mediaRef.slice(0, 60)}`);
 
   const results = {};
 
   // Post to Facebook
-  if (CFG.fbPageId) {
-    r = await fetch("https://api.postfa.st/social-posts", {
-      method: "POST", headers: PF_HEADERS,
-      body: JSON.stringify({
-        posts: [{
-          content: caption, scheduledAt,
-          socialMediaId: CFG.fbPageId,
-          mediaItems: [{ key: videoKey, type: "VIDEO", sortOrder: 0 }],
-        }],
-        controls: { facebookContentType: "REEL" },
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    const res = await r.json();
-    if (!r.ok) throw new Error(`FB post failed: ${JSON.stringify(res)}`);
-    results.fbPostId = res.postIds?.[0];
-    log(`   ✅ FB Scheduled: ${scheduledAt} | ID: ${results.fbPostId}`);
+  if (trendingPoster.getFacebookId()) {
+    try {
+      const fbResult = await trendingPoster.scheduleFacebook({ mediaRef, caption, scheduledAt });
+      results.fbPostId = fbResult.postId || fbResult.postIds?.[0];
+      log(`   ✅ FB Scheduled: ${scheduledAt} | ID: ${results.fbPostId}`);
+    } catch (e) {
+      throw new Error(`FB post failed: ${e.message}`);
+    }
   }
 
   // Post to TikTok via PostFast (nếu có tiktokId trong PostFast)
