@@ -204,14 +204,18 @@ async function processVideo(rawPath, product) {
   const hookRaw = makeHookText(product);
   const hook = hookRaw.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/[[\]"]/g, "").replace(/%/g, "%%");
 
-  // Page watermark (bottom-left badge)
-  const { text: badgeText, color: badgeColor, fontSize: badgeFontSize } = PAGE.hook;
-
   const fontEsc = FONT.replace(/\\/g, "/").replace(/:/g, "\\:");
-  const textFilter = [
+  const filters = [
     `drawtext=fontfile='${fontEsc}':fontcolor=white:fontsize=42:x=(w-text_w)/2:y=80:text='${hook}':shadowcolor=black@0.9:shadowx=3:shadowy=3:box=1:boxcolor=black@0.6:boxborderw=16`,
-    `drawtext=fontfile='${fontEsc}':fontcolor=white:fontsize=${badgeFontSize}:x=20:y=h-65:text='${badgeText}':shadowcolor=black:shadowx=2:shadowy=2:box=1:boxcolor=${badgeColor}:boxborderw=10`,
-  ].join(",");
+  ];
+  // Page watermark badge (optional — some pages don't have hook config)
+  if (PAGE.hook) {
+    const { text: badgeText, color: badgeColor, fontSize: badgeFontSize } = PAGE.hook;
+    filters.push(
+      `drawtext=fontfile='${fontEsc}':fontcolor=white:fontsize=${badgeFontSize}:x=20:y=h-65:text='${badgeText}':shadowcolor=black:shadowx=2:shadowy=2:box=1:boxcolor=${badgeColor}:boxborderw=10`
+    );
+  }
+  const textFilter = filters.join(",");
 
   let cmd;
   if (isPortrait) {
