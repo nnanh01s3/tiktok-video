@@ -21,7 +21,7 @@ import {
   existsSync, statSync, unlinkSync,
 } from "fs";
 import { join } from "path";
-import { POSTFAST_KEY, TIKTOK_ACCOUNT, BASE_DIR } from "./config.mjs";
+import { BASE_DIR } from "./config.mjs";
 
 // ── Source Pages ──────────────────────────────────────────────────────────
 const SOURCE_PAGES = [
@@ -51,10 +51,7 @@ const MAX_VIDEOS_DEFAULT = 3;
 
 mkdirSync(OUT_DIR, { recursive: true });
 
-const PF_HEADERS = {
-  "pf-api-key": POSTFAST_KEY,
-  "Content-Type": "application/json; charset=utf-8",
-};
+// PostFast headers removed — fb_repost now uses social-poster.js (PostForMe)
 
 // ── CLI args ──────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);

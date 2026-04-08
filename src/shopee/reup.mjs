@@ -25,7 +25,7 @@ import { join } from "path";
 import { genCaptionAI, genCaptionFallback } from "./caption.mjs";
 import { ShopeeAffiliate, closeCdpBrowser } from "./affiliate.mjs";
 import { shortenUrl } from "./shorten_url.mjs";
-import { PAGES, POSTFAST_KEY, FFMPEG, FONT, BASE_DIR, MAX_PER_DAY, MAX_PER_RUN } from "./config.mjs";
+import { PAGES, FFMPEG, FONT, BASE_DIR, MAX_PER_DAY, MAX_PER_RUN } from "./config.mjs";
 
 // ── Parse CLI args ─────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -58,10 +58,7 @@ const CAPTION_HISTORY_FILE = join(OUTPUT_DIR, "caption_history.json");
 
 mkdirSync(OUTPUT_DIR, { recursive: true });
 
-const PF_HEADERS = {
-  "pf-api-key": POSTFAST_KEY,
-  "Content-Type": "application/json; charset=utf-8",
-};
+// PostFast removed — reup now uses social-poster.js (PostForMe)
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function log(msg) {

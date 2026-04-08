@@ -25,7 +25,7 @@ import {
 import { join } from "path";
 import { genCaptionAI } from "./caption.mjs";
 import {
-  POSTFAST_KEY, TRENDING_CONFIG, BASE_DIR, FFMPEG, FONT,
+  TRENDING_CONFIG, BASE_DIR, FFMPEG, FONT,
 } from "./config.mjs";
 
 // ── Config ───────────────────────────────────────────────────────────────
@@ -42,10 +42,7 @@ const FB_REPOST_PROCESSED = join(BASE_DIR, "fb-repost", "processed.json");
 
 mkdirSync(OUT_DIR, { recursive: true });
 
-const PF_HEADERS = {
-  "pf-api-key": POSTFAST_KEY,
-  "Content-Type": "application/json; charset=utf-8",
-};
+// PostFast removed — trending_repost now uses social-poster.js (PostForMe)
 
 // ── CLI args ─────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -674,8 +671,7 @@ function getNextGoldenSlot(slotIndex) {
 
 // ── Upload + Post via social-poster ─────────────────────────────────────
 import { createPoster } from "../social-poster.js";
-import { PAGES } from "./config.mjs";
-const trendingPoster = createPoster(PAGES.shopee); // trending posts to "Sưu Tầm Hàng Dị"
+const trendingPoster = createPoster({ provider: CFG.provider || "postforme", pfmId: CFG.pfmFbId });
 
 async function uploadAndPost(videoPath, caption, scheduledAt) {
   const mediaRef = await trendingPoster.upload(videoPath);
@@ -694,34 +690,7 @@ async function uploadAndPost(videoPath, caption, scheduledAt) {
     }
   }
 
-  // Post to TikTok via PostFast (nếu có tiktokId trong PostFast)
-  if (CFG.tiktokId) {
-    try {
-      const ttSchedule = new Date(new Date(scheduledAt).getTime() + 5 * 60_000)
-        .toISOString().replace(/\.\d{3}Z$/, ".000Z");
-      r = await fetch("https://api.postfa.st/social-posts", {
-        method: "POST", headers: PF_HEADERS,
-        body: JSON.stringify({
-          posts: [{
-            content: caption, scheduledAt: ttSchedule,
-            socialMediaId: CFG.tiktokId,
-            mediaItems: [{ key: videoKey, type: "VIDEO", sortOrder: 0 }],
-          }],
-          controls: { tiktokPrivacy: "PUBLIC", tiktokAllowComments: true, tiktokAllowDuet: true, tiktokAllowStitch: true },
-        }),
-        signal: AbortSignal.timeout(30_000),
-      });
-      const ttRes = await r.json();
-      if (r.ok) {
-        results.ttPostId = ttRes.postIds?.[0];
-        log(`   ✅ TikTok Scheduled: ${ttSchedule} | ID: ${results.ttPostId}`);
-      }
-    } catch (e) {
-      log(`   ⚠️ TikTok post failed: ${e.message?.slice(0, 60)}`);
-    }
-  }
-
-  // Post to TikTok Direct — bypass PostFast account limit (@suutam0405)
+  // Post to TikTok Direct (@suutam0405 via Chrome CDP)
   if (CFG.tiktokDirect) {
     try {
       const { TikTokDirectPoster } = await import("../tiktok-direct.mjs");
