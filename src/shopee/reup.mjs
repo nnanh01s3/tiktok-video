@@ -112,9 +112,12 @@ async function discoverProducts(usedIds) {
       log,
     };
 
-    // If page has specific categories, filter by them
+    // Filter by category — PAGE.categories has { catids, matchIds }
+    // catids: filter products from cache by product catid
+    // matchIds: filter API queries (when API works)
     if (PAGE.categories) {
-      opts.categoryIds = PAGE.categories;
+      opts.categoryIds = PAGE.categories.matchIds || PAGE.categories;
+      opts.catidFilter = PAGE.categories.catids || null;
     }
 
     const products = await shopeeAff.discoverProducts(usedIds, opts);

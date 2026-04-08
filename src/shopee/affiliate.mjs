@@ -450,7 +450,8 @@ export class ShopeeAffiliate {
       productsPerCat = 3,
       minCommission = 0,
       videoOnly = true,
-      categoryIds = null,
+      categoryIds = null,  // match_ids for API queries
+      catidFilter = null,  // product catids for cache filtering
       log = console.log,
     } = {}
   ) {
@@ -461,15 +462,30 @@ export class ShopeeAffiliate {
     const cache = readCache();
     if (cache) {
       log("📦 Đọc từ cache (fetch_products.mjs)...");
-      const products = cache.products.map(item => parseProduct(item, "cache"));
+
+      // Filter by product catid (from batch_item_for_item_card_full.catid)
+      // This is the REAL product category, not the offer match_id
+      const catidSet = catidFilter ? new Set(catidFilter.map(Number)) : null;
+      const matchesCategory = (item) => {
+        if (!catidSet) return true; // null = no filter, accept all
+        const productCatid = item.batch_item_for_item_card_full?.catid;
+        return productCatid ? catidSet.has(Number(productCatid)) : false;
+      };
+
+      const products = cache.products
+        .filter(matchesCategory)
+        .map(item => parseProduct(item, "cache"));
       allProducts = products.filter(
         p => !usedIds.includes(p.itemId) &&
              p.affiliateLink &&
              p.commissionRate >= minCommission &&
-             (!videoOnly || p.hasVideo) &&
-             (!categoryIds || true) // cache already filtered
+             (!videoOnly || p.hasVideo)
       ).sort(() => Math.random() - 0.5).slice(0, categoriesPerRun * productsPerCat);
       usedCache = true;
+
+      if (categoryIds) {
+        log(`   🏷️ Filtered by categories: [${categoryIds.join(", ")}] → ${allProducts.length} products`);
+      }
     }
 
     // Fallback 1: try API if cache missed/expired
@@ -482,7 +498,13 @@ export class ShopeeAffiliate {
         const staleCache = readCache(true); // ignoreAge = true
         if (staleCache) {
           log("📦 API fail → đọc cache cũ (expired)...");
-          const products = staleCache.products.map(item => parseProduct(item, "cache-stale"));
+          const catidSet2 = catidFilter ? new Set(catidFilter.map(Number)) : null;
+          const matchesCat = (item) => {
+            if (!catidSet2) return true;
+            const cid = item.batch_item_for_item_card_full?.catid;
+            return cid ? catidSet2.has(Number(cid)) : false;
+          };
+          const products = staleCache.products.filter(matchesCat).map(item => parseProduct(item, "cache-stale"));
           allProducts = products.filter(
             p => !usedIds.includes(p.itemId) && p.affiliateLink &&
                  p.commissionRate >= minCommission && (!videoOnly || p.hasVideo)

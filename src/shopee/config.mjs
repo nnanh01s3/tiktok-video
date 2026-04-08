@@ -20,18 +20,30 @@ export const TIKTOK_QUOTES_CONFIG = {
 };
 
 // ── Shopee Category IDs ────────────────────────────────────────────────────
-// From Shopee Affiliate API: affiliate.shopee.vn/api/v3/category
-// 16 categories, mỗi cái 500 SP có video
+//
+// 2 HỆ THỐNG ID:
+//   - match_id: dùng cho Affiliate API filter (list_type=0, match_type=2, match_id=X)
+//   - catid: product category thực tế (trong batch_item_for_item_card_full.catid)
+//
+// LƯU Ý: Shopee API trả kết quả gần giống nhau cho mọi match_id query.
+// Để filter chính xác, dùng CATID_FILTER (product catid) khi đọc cache.
+// MATCH_IDS dùng khi gọi API trực tiếp (hiếm khi hoạt động do TLS fingerprinting).
+
+// match_id cho Affiliate API queries
+export const SHOPEE_MATCH_IDS = [100630, 100632, 100633, 100634, 100635, 100636, 100637, 100638, 100639, 100640, 100641, 100642, 100010, 100011, 100012, 100017];
+
+// catid → page mapping (product category thực tế)
+// Dùng để filter sản phẩm từ cache cho đúng page
 export const SHOPEE_CATEGORIES = {
-  cong_nghe:   [100642, 100630, 100632, 100633],  // Điện tử, ĐT, Laptop, Đồng hồ
-  gia_dung:    [100636, 100640],                   // Nhà cửa & Đời sống, Thời trang Nam (gia dụng)
-  sac_dep:     [100637],                           // Sắc Đẹp
-  thoi_trang:  [100638, 100640, 100634, 100635],   // TT Nữ, TT Nam, Giày Dép, Túi Ví
-  me_be:       [100641],                           // Mẹ & Bé
-  the_thao:    [100010],                           // Thể Thao & Du Lịch
-  xe_co:       [100011],                           // Ô Tô & Xe Máy
-  suc_khoe:    [100012],                           // Sức Khỏe
-  bach_hoa:    [100639, 100017],                   // Bách Hóa Online, Nhà Sách
+  cong_nghe:   { catids: [100013, 100642, 100630],  matchIds: [100642, 100630, 100632, 100633] },  // Quạt, điện tử, phụ kiện ĐT
+  gia_dung:    { catids: [100010, 100632, 100636],   matchIds: [100636, 100640] },                   // Quạt tích điện, giấy, nước giặt
+  sac_dep:     { catids: [100637],                   matchIds: [100637] },                            // Sắc Đẹp
+  thoi_trang:  { catids: [100009, 100011, 100017, 100532, 100640], matchIds: [100638, 100640, 100634, 100635] }, // Áo, dép, kính, balo
+  me_be:       { catids: [100641],                   matchIds: [100641] },                            // Mẹ & Bé
+  the_thao:    { catids: [100010],                   matchIds: [100010] },                            // Thể Thao (overlap với gia_dung)
+  xe_co:       { catids: [100011, 100636],           matchIds: [100011] },                            // Gối xe hơi, phụ kiện xe
+  suc_khoe:    { catids: [100012],                   matchIds: [100012] },                            // Sức Khỏe
+  bach_hoa:    { catids: [100001, 100629, 100639],   matchIds: [100639, 100017] },                    // Khẩu trang, muối, bách hóa
 };
 
 // ── Page Configs ───────────────────────────────────────────────────────────
