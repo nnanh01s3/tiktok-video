@@ -105,8 +105,8 @@ export const PAGES = {
   me_be: {
     name: "Mẹ & Bé Thông Minh",
     provider: "postforme",
-    fbId: null,
-    pfmId: null,
+    fbId: "61575412007083",
+    pfmId: "spc_lHWm4m0YMPDd6fQDKCgjQ",
     ttId: null,
     categories: SHOPEE_CATEGORIES.me_be,
     caption: { platform: "facebook", niche: "đồ mẹ và bé Shopee", pageName: "Mẹ & Bé Thông Minh" },
