@@ -126,13 +126,26 @@ async function discoverProducts(usedIds) {
       return products;
     }
 
-    // Fallback: try without videoOnly filter
+    // Fallback 1: same category without videoOnly filter
     opts.videoOnly = false;
     const all = await shopeeAff.discoverProducts(usedIds, opts);
     const withVideo = all.filter(p => p.hasVideo);
     if (withVideo.length > 0) {
-      log(`   ✅ Tìm thêm ${withVideo.length} SP có video`);
+      log(`   ✅ Tìm thêm ${withVideo.length} SP có video (no videoOnly filter)`);
       return withVideo;
+    }
+
+    // Fallback 2: no category filter (random products) — better than 0
+    if (PAGE.categories) {
+      log("   ⚠️ Không có SP cho category này, thử random...");
+      const randomProducts = await shopeeAff.discoverProducts(usedIds, {
+        categoriesPerRun: 4, productsPerCat: 4,
+        minCommission: 0, videoOnly: true, log,
+      });
+      if (randomProducts.length > 0) {
+        log(`   ✅ Fallback: ${randomProducts.length} SP random có video`);
+        return randomProducts;
+      }
     }
 
     log("   ⚠️ Không có SP nào có video");
