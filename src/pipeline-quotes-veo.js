@@ -31,7 +31,7 @@ import { generateVoiceover } from "./tts.js";
 import { generateVideo, buildScenePrompts, pickAvailableModel } from "./veo.js";
 import { generateImage } from "./imagen.js";
 import { createPoster } from "./social-poster.js";
-import { PAGES } from "./shopee/config.mjs";
+import { TIKTOK_QUOTES_CONFIG } from "./shopee/config.mjs";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const STEP = process.argv.find((a) => a.startsWith("--step="))?.split("=")[1];
@@ -810,7 +810,7 @@ export async function runPipeline(opts = {}) {
   log("Step 6: Uploading to PostFast...");
   updateVideoStatus(jobId, "uploading");
 
-  const quotePoster = createPoster(PAGES.shopee); // TikTok quotes → "Sưu Tầm Hàng Dị" page
+  const quotePoster = createPoster(TIKTOK_QUOTES_CONFIG); // Tuệ Đàm — chỉ quotes, không Shopee
   if (!quotePoster.getTikTokId()) {
     log("ERROR: No TikTok account configured for quotes pipeline");
     updateVideoStatus(jobId, "failed");

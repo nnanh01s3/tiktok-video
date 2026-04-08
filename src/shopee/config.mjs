@@ -12,6 +12,13 @@ export const POSTFAST_KEY = process.env.POSTFA_API_KEY || process.env.POSTFAST_A
 
 export const TIKTOK_ACCOUNT = "cc7c3ff7-3697-4f2f-aec1-7a044daae4b6";
 
+// Config riêng cho TikTok Quotes pipeline (Tuệ Đàm — chỉ post quotes, KHÔNG post Shopee)
+export const TIKTOK_QUOTES_CONFIG = {
+  provider: "postfast",
+  ttId: TIKTOK_ACCOUNT, // @trituemoingay.vn (Tuệ Đàm)
+  pfmTtId: null, // TODO: add PostForMe TikTok ID after migration
+};
+
 // ── Shopee Category IDs ────────────────────────────────────────────────────
 // From Shopee Affiliate API: affiliate.shopee.vn/api/v3/category
 // 16 categories, mỗi cái 500 SP có video
@@ -41,7 +48,7 @@ export const PAGES = {
     provider: "postfast",
     fbId: "f195f36e-ebec-4589-a05c-ac5ddfd15b24",
     pfmId: null, // TODO: add PostForMe ID after migration
-    ttId: TIKTOK_ACCOUNT,
+    ttId: null, // Tuệ Đàm chỉ post quotes, KHÔNG post sản phẩm Shopee
     categories: null, // null = random across all categories
     caption: { platform: "both", niche: "đồ lạ Shopee", pageName: "Sưu Tầm Hàng Dị" },
     postComments: true,
