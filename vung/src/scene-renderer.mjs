@@ -45,6 +45,16 @@ function isExhausted(err) {
          msg.includes("rate limit");
 }
 
+// Some keys lack access to specific models (e.g., Imagen 3 only on paid plans
+// for some projects). Trigger key rotation in those cases too.
+function isKeyAccessDenied(err) {
+  const msg = String(err?.message || err || "").toLowerCase();
+  return msg.includes("only available on paid") ||
+         (msg.includes("invalid_argument") && msg.includes("imagen")) ||
+         msg.includes("permission_denied") ||
+         msg.includes("failed_precondition");
+}
+
 /**
  * Retry helper: rotate through keys until success or all exhausted.
  *
@@ -69,6 +79,11 @@ async function withKeyRotation(model, fn) {
       if (isExhausted(err)) {
         markKeyExhausted(keyId, model);
         console.log(`[Render] ${keyId} exhausted (${model}), trying next...`);
+        continue;
+      }
+      if (isKeyAccessDenied(err)) {
+        console.log(`[Render] ${keyId} lacks access to ${model}, rotating...`);
+        markKeyExhausted(keyId, model);
         continue;
       }
       // Non-quota error → bubble up
