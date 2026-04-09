@@ -490,14 +490,19 @@ export class ShopeeAffiliate {
 
     // Fallback 1: try API if cache missed/expired
     if (allProducts.length === 0 && !usedCache) {
+      let apiError = null;
       try {
         if (!this.isReady()) throw new Error("no cookies");
         allProducts = await this._fetchFromApi({ usedIds, categoriesPerRun, productsPerCat, minCommission, videoOnly, categoryIds, log });
-      } catch {
-        // Fallback 2: read expired cache (better than nothing)
+      } catch (e) {
+        apiError = e;
+      }
+
+      // Fallback 2: read expired cache — triggered if API threw OR returned empty
+      if (allProducts.length === 0) {
         const staleCache = readCache(true); // ignoreAge = true
         if (staleCache) {
-          log("📦 API fail → đọc cache cũ (expired)...");
+          log(apiError ? "📦 API fail → đọc cache cũ (expired)..." : "📦 API trả 0 SP → đọc cache cũ (expired)...");
           const catidSet2 = catidFilter ? new Set(catidFilter.map(Number)) : null;
           const matchesCat = (item) => {
             if (!catidSet2) return true;
@@ -509,6 +514,9 @@ export class ShopeeAffiliate {
             p => !usedIds.includes(p.itemId) && p.affiliateLink &&
                  p.commissionRate >= minCommission && (!videoOnly || p.hasVideo)
           ).sort(() => Math.random() - 0.5).slice(0, categoriesPerRun * productsPerCat);
+          if (allProducts.length > 0) {
+            log(`   ✅ Stale cache: ${allProducts.length} SP`);
+          }
         } else {
           log("❌ API fail + không có cache, 0 sản phẩm.");
         }
