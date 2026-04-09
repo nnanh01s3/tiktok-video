@@ -33,20 +33,17 @@ const CACHE_FILE = join(ROOT, "data/shopee/products_cache.json");
 const CACHE_MAX_AGE = 4 * 60 * 60 * 1000; // 4 hours
 
 const FB_SCRIPTS = [
-  // ── Existing pages (PostFast) ──
+  // ── 8 FB pages (all PostForMe) ──
   { name: "shopee",     cmd: ["src/shopee/reup.mjs", "--page", "shopee", "--delay", "0"] },
   { name: "gia_dung",   cmd: ["src/shopee/reup.mjs", "--page", "gia_dung", "--delay", "5"] },
   { name: "tech",       cmd: ["src/shopee/reup.mjs", "--page", "tech", "--delay", "10"] },
-  // ── New pages (PostForMe) — will be activated once pfmId is set ──
   { name: "sac_dep",    cmd: ["src/shopee/reup.mjs", "--page", "sac_dep", "--delay", "15"] },
   { name: "thoi_trang", cmd: ["src/shopee/reup.mjs", "--page", "thoi_trang", "--delay", "20"] },
   { name: "me_be",      cmd: ["src/shopee/reup.mjs", "--page", "me_be", "--delay", "25"] },
   { name: "the_thao",   cmd: ["src/shopee/reup.mjs", "--page", "the_thao", "--delay", "30"] },
-  { name: "xe_co",      cmd: ["src/shopee/reup.mjs", "--page", "xe_co", "--delay", "35"] },
-  { name: "suc_khoe",   cmd: ["src/shopee/reup.mjs", "--page", "suc_khoe", "--delay", "40"] },
-  { name: "bach_hoa",   cmd: ["src/shopee/reup.mjs", "--page", "bach_hoa", "--delay", "45"] },
+  { name: "bach_hoa",   cmd: ["src/shopee/reup.mjs", "--page", "bach_hoa", "--delay", "35"] },
   // ── FB repost ──
-  { name: "fb_repost",  cmd: ["src/shopee/fb_repost.mjs", "--max", "2", "--delay", "50"] },
+  { name: "fb_repost",  cmd: ["src/shopee/fb_repost.mjs", "--max", "2", "--delay", "40"] },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────

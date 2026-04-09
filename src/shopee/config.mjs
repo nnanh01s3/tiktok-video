@@ -96,24 +96,6 @@ export const PAGES = {
     postComments: false,
   },
 
-  xe_co: {
-    name: "Phụ Kiện Xe Hơi & Xe Máy",
-    provider: "postforme",
-    pfmId: null, // TODO: tạo FB page
-    categories: SHOPEE_CATEGORIES.xe_co,
-    caption: { platform: "facebook", niche: "phụ kiện xe hơi xe máy Shopee", pageName: "Phụ Kiện Xe Hơi & Xe Máy" },
-    postComments: false,
-  },
-
-  suc_khoe: {
-    name: "Sức Khỏe Mỗi Ngày",
-    provider: "postforme",
-    pfmId: null, // TODO: tạo FB page
-    categories: SHOPEE_CATEGORIES.suc_khoe,
-    caption: { platform: "facebook", niche: "sức khỏe chăm sóc bản thân Shopee", pageName: "Sức Khỏe Mỗi Ngày" },
-    postComments: false,
-  },
-
   bach_hoa: {
     name: "Bách Hóa & Sách Hay",
     provider: "postforme",
