@@ -241,7 +241,7 @@ export function parseEpisode(filePath) {
     );
   }
 
-  const scenes = sceneSections.map((section) => {
+  const scenes = sceneSections.map((section, idx) => {
     const sectionLines = section.split("\n");
     const header = parseSceneHeader(sectionLines[0]);
     if (!header) {
@@ -268,6 +268,21 @@ export function parseEpisode(filePath) {
     const characters = extractCharactersFromBreakdown(breakdown, dialogue);
     const visualDescription = breakdown.join(" ") || goal;
 
+    // Detect title scenes — these need FFmpeg text overlay (Vietnamese fonts)
+    // instead of AI-generated text (which fails on non-English).
+    // Title scenes:
+    //   - Scene 1 (always intro/title)
+    //   - Last scene IF its title contains "KẾT" or "CTA"
+    const isFirstScene = header.id === 1;
+    const isLastScene = idx === sceneSections.length - 1;
+    const looksLikeCTA = /\b(KẾT|CTA|ENDING|OUTRO)\b/i.test(header.title);
+    const isTitle = isFirstScene || (isLastScene && looksLikeCTA);
+
+    // textOverlays will be populated AFTER all scenes are parsed,
+    // by deriving from episode metadata (more reliable than regex on markdown).
+    // Title scenes get default overlays based on scene type.
+    const textOverlays = [];
+
     return {
       id: header.id,
       title: header.title,
@@ -281,8 +296,33 @@ export function parseEpisode(filePath) {
       dialogue,
       characters,
       sfx,
+      isTitle,
+      isFirstScene,
+      isLastScene,
+      textOverlays,
     };
   });
+
+  // Post-process: derive title overlays from episode metadata
+  // This is more reliable than regex parsing of free-form markdown
+  const SERIES_TITLE = "🌳 RỪNG XÌ TIN";
+  for (const scene of scenes) {
+    if (!scene.isTitle) continue;
+
+    if (scene.isFirstScene) {
+      // Intro: series logo + episode subtitle
+      scene.textOverlays = [
+        SERIES_TITLE,
+        `TẬP ${episodeNumber}: ${episodeTitle}`,
+      ];
+    } else if (scene.isLastScene) {
+      // CTA: pointer to next episode (assume sequential)
+      scene.textOverlays = [
+        `👉 ĐÓN XEM TẬP ${episodeNumber + 1}`,
+        "Nhớ theo dõi nhé!",
+      ];
+    }
+  }
 
   const totalDuration = scenes.reduce((sum, s) => sum + s.duration, 0);
 

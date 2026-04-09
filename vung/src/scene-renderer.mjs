@@ -80,18 +80,23 @@ async function withKeyRotation(model, fn) {
 
 // ── Step 1: Build Imagen prompt for a scene ─────────────────────────────
 function buildScenePrompt(scene) {
-  // Base: visual description from breakdown
-  const action = scene.visualDescription || scene.goal || scene.title;
-
-  // Characters appearing in this scene: inject their visual prompts
+  // IMPORTANT: Don't include "Scene N: TITLE" prefix — that text gets
+  // rendered as garbled letters in the generated image. Imagen treats
+  // any text in the prompt as a hint to draw text in the image.
+  //
+  // Strategy:
+  //   - Pure visual description (action from breakdown)
+  //   - Character visual prompts injected
+  //   - Master style for consistency
+  //   - Explicit "no text" negative
+  const action = scene.visualDescription || scene.goal || "";
   const charPrompt = buildCharacterPrompt(scene.characters);
 
-  // Combine — master style last for strongest influence
   const parts = [
-    `Scene ${scene.id}: ${scene.title}`,
     action,
     charPrompt,
     MASTER_STYLE_PROMPT,
+    "NO TEXT, NO LETTERS, NO WRITING, NO SIGNS, NO LOGOS in the image",
   ].filter(Boolean);
 
   return parts.join(". ");
@@ -127,18 +132,30 @@ async function generateSceneImage(scene, outputPath) {
   return outputPath;
 }
 
-// ── Step 3: Animate image with Veo 2.0 ───────────────────────────────────
+// ── Step 3: Animate image with Veo 3.1 Lite ──────────────────────────────
 function buildVeoMotionPrompt(scene) {
-  // Veo motion prompt should describe MOVEMENT, not characters (those come from image)
-  const beats = scene.breakdown.join(" → ");
-  const dialogueHint = scene.dialogue.length > 0
-    ? `Characters express emotion matching the scene.`
+  // Lesson learned: Veo 3.1 Lite struggles when prompt lists 5 separate beats
+  // joined with "→" — it tries to fit too much into 8 seconds and ends up
+  // animating only the first or last beat.
+  //
+  // Better strategy: Use the FIRST 1-2 beats as the dominant motion,
+  // mention later beats as "ending with..." for context only.
+  const beats = scene.breakdown;
+  const primaryAction = beats.slice(0, 2).join(" Then "); // first 2 beats = main action
+  const endingHint = beats.length > 2
+    ? ` Ending with ${beats[beats.length - 1].slice(0, 80)}.`
     : "";
+  const dialogueHint = scene.dialogue.length > 0
+    ? " Characters express emotion matching their dialogue."
+    : "";
+
   return [
-    beats || scene.goal || scene.title,
+    primaryAction || scene.goal || scene.title,
+    endingHint,
     dialogueHint,
-    "Smooth animation, cinematic camera, vibrant colors, pixar-style 3D cartoon",
-  ].filter(Boolean).join(" ");
+    "Smooth fluid animation, cinematic camera movement, vibrant colors,",
+    "pixar-style 3D cartoon, expressive characters, no text overlay",
+  ].join(" ").replace(/\s+/g, " ").trim();
 }
 
 async function generateSceneClip(scene, imagePath, outputPath) {
@@ -288,6 +305,14 @@ async function generateDialogueAudio(scene, outputDir) {
  */
 export async function renderScene(scene, outputDir) {
   ensureDir(`${outputDir}/.keep`);
+
+  // Title scenes (intro, CTA) bypass Veo entirely:
+  // Vietnamese text needs FFmpeg drawtext for reliability,
+  // and saves $0.40/scene vs Veo.
+  if (scene.isTitle) {
+    const { renderTitleScene } = await import("./title-card-renderer.mjs");
+    return renderTitleScene(scene, outputDir);
+  }
 
   const sceneIdPadded = String(scene.id).padStart(2, "0");
   const imagePath = `${outputDir}/scene_${sceneIdPadded}.png`;
