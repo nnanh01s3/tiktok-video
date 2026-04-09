@@ -43,13 +43,16 @@ const DAILY_QUOTAS = {
 
 // ── Load keys from env ───────────────────────────────────────────────────
 //
-// Two pools of keys:
-//   - FREE pool (all keys): GEMINI_API_KEY + GEMINI_API_KEY1..N
-//     Used for Imagen, TTS, Gemini text — these models work on free tier
-//   - VEO pool (billed only): GEMINI_VEO_KEY_1..N
-//     Used for Veo — billing required since April 2026
+// Single source of truth: GEMINI_API_KEY + GEMINI_API_KEY1..N
 //
-// User must copy their billed API keys to GEMINI_VEO_KEY_1..N in .env
+// Two pools select FROM the same key list:
+//   - FREE pool (all keys) → Imagen, TTS, Gemini text (work on free tier)
+//   - VEO pool (subset)    → Veo 3.1 Lite (needs GCP billing)
+//
+// To mark which keys have billing enabled, set in .env:
+//     GEMINI_VEO_KEY_INDICES=1,2,3,4
+// This means GEMINI_API_KEY1, GEMINI_API_KEY2, GEMINI_API_KEY3, GEMINI_API_KEY4
+// are billed and can be used for Veo. Update this list when enabling more billing.
 function loadKeys() {
   const keys = [];
   if (process.env.GEMINI_API_KEY) {
@@ -66,12 +69,38 @@ function loadKeys() {
 }
 
 function loadVeoKeys() {
-  const keys = [];
-  for (let i = 1; i <= 20; i++) {
-    const val = process.env[`GEMINI_VEO_KEY_${i}`];
-    if (val) keys.push({ id: `veo_key_${i}`, value: val });
+  const indicesStr = process.env.GEMINI_VEO_KEY_INDICES || "";
+  if (!indicesStr.trim()) return [];
+
+  const indices = indicesStr
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => parseInt(s, 10))
+    .filter((n) => !Number.isNaN(n));
+
+  const allKeys = loadKeys();
+  const keyMap = new Map(allKeys.map((k) => [k.id, k]));
+
+  const veoKeys = [];
+  const missing = [];
+  for (const idx of indices) {
+    const key = keyMap.get(`key_${idx}`);
+    if (key) {
+      // Tag with veo prefix so usage tracking is separate from free pool
+      veoKeys.push({ id: `veo_${key.id}`, value: key.value, originalId: key.id });
+    } else {
+      missing.push(idx);
+    }
   }
-  return keys;
+
+  if (missing.length > 0) {
+    console.warn(
+      `[KeyPool] ⚠ GEMINI_VEO_KEY_INDICES references missing keys: [${missing.join(", ")}]. ` +
+      `Make sure GEMINI_API_KEY${missing[0]} is set.`
+    );
+  }
+  return veoKeys;
 }
 
 function loadKeysForModel(model) {
@@ -79,8 +108,9 @@ function loadKeysForModel(model) {
     const veoKeys = loadVeoKeys();
     if (veoKeys.length === 0) {
       throw new Error(
-        "No Veo-capable keys found. Set GEMINI_VEO_KEY_1..N in .env with billed API keys.\n" +
-        "Veo requires GCP billing (enabled per project). Free-tier keys won't work."
+        "No Veo-capable keys found. Set GEMINI_VEO_KEY_INDICES=1,2,3,4 in .env\n" +
+        "(comma-separated indices of GEMINI_API_KEYs that have GCP billing enabled).\n" +
+        "Veo requires billing. Free-tier keys won't work."
       );
     }
     return veoKeys;
