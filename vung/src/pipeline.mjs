@@ -164,12 +164,34 @@ async function main() {
     }
   } else {
     console.log("⏭ Skipping render, loading existing assets...\n");
+    // Clip path resolution (priority order):
+    //   1. Title scenes → scene_NN_v4.mp4 (multi-sub-shot rendering)
+    //   2. CTA scenes with text overlay → scene_NN_overlay.mp4 (FFmpeg drawtext)
+    //   3. Regular scenes → scene_NN.mp4 (raw Veo clip)
+    const TITLE_VERSION = "v4";
     for (const scene of scenesToRender) {
       const sceneIdPadded = String(scene.id).padStart(2, "0");
+      const titleClip = `${outputDir}/scene_${sceneIdPadded}_${TITLE_VERSION}.mp4`;
+      const overlayClip = `${outputDir}/scene_${sceneIdPadded}_overlay.mp4`;
+      const regularClip = `${outputDir}/scene_${sceneIdPadded}.mp4`;
+
+      let clipPath;
+      if (scene.isTitle && existsSync(titleClip)) {
+        clipPath = titleClip;
+      } else if (scene.textOverlays?.length > 0 && existsSync(overlayClip)) {
+        clipPath = overlayClip;
+      } else {
+        clipPath = regularClip;
+      }
+
+      const imagePath = scene.isTitle
+        ? `${outputDir}/scene_${sceneIdPadded}_sub01_${TITLE_VERSION}.png`
+        : `${outputDir}/scene_${sceneIdPadded}.png`;
+
       rendered.push({
         scene,
-        imagePath: `${outputDir}/scene_${sceneIdPadded}.png`,
-        clipPath: `${outputDir}/scene_${sceneIdPadded}.mp4`,
+        imagePath,
+        clipPath,
         dialogue: scene.dialogue.map((d, i) => ({
           path: `${outputDir}/voice_${sceneIdPadded}_${i}_${d.character}.wav`,
           character: d.character,

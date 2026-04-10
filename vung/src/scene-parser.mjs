@@ -83,18 +83,37 @@ function parseTimeRange(line) {
 }
 
 // ── Episode header parsing ───────────────────────────────────────────────
+//
+// Supports TWO header formats:
+//
+// v1 (two H1 lines):
+//   # 🎬 RỪNG XÌ TIN - TẬP 1
+//   # QUẢ CHUỐI BÍ ẨN
+//
+// v2 (one combined H1 line):
+//   # 🎬 RỪNG XÌ TIN - TẬP 1: QUẢ CHUỐI BÍ ẨN
 function parseHeader(lines) {
   let episodeNumber = 0;
   let episodeTitle = "";
 
   for (const line of lines.slice(0, 10)) {
-    // "# 🎬 RỪNG XÌ TIN - TẬP 1"
+    // Extract episode number from any line mentioning "TẬP N"
     const numMatch = line.match(/T[ẬẬ]P\s+(\d+)/i);
     if (numMatch) episodeNumber = parseInt(numMatch[1], 10);
 
-    // "# QUẢ CHUỐI BÍ ẨN" (the second H1 after the series title)
-    if (/^#\s+[^🎬]/.test(line) && !line.includes("RỪNG") && !line.includes("VEO")) {
-      if (!episodeTitle) episodeTitle = line.replace(/^#\s+/, "").trim();
+    // v2 combined format: "# 🎬 RỪNG XÌ TIN - TẬP 1: QUẢ CHUỐI BÍ ẨN"
+    // Look for H1 line containing "TẬP N:" followed by the episode title
+    if (!episodeTitle) {
+      const combinedMatch = line.match(/^#\s+.*T[ẬẬ]P\s+\d+\s*[:\-–—]\s*(.+?)\s*$/i);
+      if (combinedMatch) {
+        episodeTitle = combinedMatch[1].trim();
+        continue;
+      }
+    }
+
+    // v1 separate format: second H1 line (not the series header, not VEO tag)
+    if (!episodeTitle && /^#\s+[^🎬]/.test(line) && !line.includes("RỪNG") && !line.includes("VEO")) {
+      episodeTitle = line.replace(/^#\s+/, "").trim();
     }
   }
 
@@ -120,9 +139,14 @@ function parseSceneHeader(headerLine) {
 }
 
 function extractSection(sceneText, sectionName) {
-  // Extract content between "### sectionName" and the next "###" or end
+  // Extract content between "### sectionName ..." and the next "###" or end.
+  //
+  // The `[^\\n]*` after the section name allows trailing words on the same
+  // header line. This handles both v1 format (e.g. `### Mục tiêu`) and v2
+  // format (e.g. `### Mục tiêu scene`, `### Breakdown theo từng giây`,
+  // `### Âm thanh / nhạc / SFX`).
   const pattern = new RegExp(
-    `###\\s*${sectionName}\\s*\\n([\\s\\S]*?)(?=\\n###\\s|\\n---|$)`,
+    `###\\s*${sectionName}[^\\n]*\\n([\\s\\S]*?)(?=\\n###\\s|\\n---|$)`,
     "i"
   );
   const m = sceneText.match(pattern);
@@ -130,24 +154,199 @@ function extractSection(sceneText, sectionName) {
 }
 
 function parseBreakdown(breakdownText) {
-  // "* **Giây 1–2:** description..." → array of descriptions
+  // Supports TWO breakdown formats:
+  //
+  // v1 (inline):
+  //   * **Giây 1–2:** description of beat 1...
+  //   * **Giây 3–4:** description of beat 2...
+  //
+  // v2 (header + bullet list):
+  //   **Giây 1**
+  //
+  //   * Khung hình cực rộng: Trái Đất hiện...
+  //   * Mặt trời ló từ mép trái phía sau Trái Đất...
+  //
+  //   **Giây 2**
+  //
+  //   * Camera tăng tốc...
+  //
+  // Returns an array where each entry is one beat (for v2, all bullets under
+  // a Giây header are concatenated into a single beat description).
   if (!breakdownText) return [];
   const lines = breakdownText.split("\n");
   const items = [];
-  for (const line of lines) {
-    const m = line.match(/^\s*\*\s*\*\*Giây[^*]*\*\*:?\s*(.+)/);
-    if (m) items.push(m[1].trim());
+  let currentBeat = null; // null = not inside a v2 beat; string = v2 beat accumulating
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+$/, ""); // rtrim only (preserve leading indent)
+
+    // v1 format: * **Giây 1–2:** text...
+    const v1Match = line.match(/^\s*\*\s*\*\*Giây[^*]*\*\*:?\s*(.+)/);
+    if (v1Match) {
+      if (currentBeat !== null && currentBeat.trim()) items.push(currentBeat.trim());
+      items.push(v1Match[1].trim());
+      currentBeat = null;
+      continue;
+    }
+
+    // v2 format: **Giây N** on its own line (header, no text after)
+    // Also tolerate "**Giây 3** 🟢" style decorations after the marker.
+    const v2Header = line.match(/^\s*\*\*Giây\s+\d+\*\*\s*\S*\s*$/);
+    if (v2Header) {
+      if (currentBeat !== null && currentBeat.trim()) items.push(currentBeat.trim());
+      currentBeat = "";
+      continue;
+    }
+
+    // Accumulate v2 bullet lines into the current beat
+    if (currentBeat !== null) {
+      const bulletMatch = line.match(/^\s*\*\s+(.+)/);
+      if (bulletMatch) {
+        // Strip bold markers and smart-quote wrappers so we get clean prose
+        const content = bulletMatch[1]
+          .replace(/\*\*/g, "")
+          .trim();
+        currentBeat += (currentBeat ? " " : "") + content;
+      }
+    }
+  }
+
+  // Finalize last v2 beat
+  if (currentBeat !== null && currentBeat.trim()) {
+    items.push(currentBeat.trim());
   }
   return items;
 }
 
+/**
+ * Extract CTA text overlays from breakdown text.
+ *
+ * Supports TWO script formats:
+ *
+ * v1 format (standalone markers):
+ *   * **Giây 7–8:** Text hiện lên + voice over:
+ *
+ *     👉 Text:
+ *     "👉 ĐÓN XEM TẬP 2: WIFI RỪNG BỊ LAG!"
+ *
+ *     👉 Voice (giọng vui):
+ *     "Đừng bỏ lỡ tập tiếp theo nhé!"
+ *
+ * v2 format (embedded bold-quoted CTA in beat content):
+ *   **Giây 8**
+ *
+ *   * Text hiện lớn, rõ:
+ *     **"👉 ĐÓN XEM TẬP 2: WIFI RỪNG BỊ LAG!"**
+ *
+ * In v2, the voice-over for CTA is declared as a regular dialogue line
+ * inside the "Lời thoại" section using character "Voice Over", which is
+ * aliased to "narrator" in parseDialogue → normalizeCharacterKey. So this
+ * function only needs to extract the textOverlays for v2.
+ *
+ * Returns:
+ *   - textOverlays: array of CTA text strings (FFmpeg drawtext overlays)
+ *   - voiceOvers: v1 narrator lines (v2 handles these via dialogue parser)
+ */
+function parseCtaFromBreakdown(breakdownText) {
+  const textOverlays = [];
+  const voiceOvers = [];
+  if (!breakdownText) return { textOverlays, voiceOvers };
+
+  const lines = breakdownText.split("\n");
+  const stripQuotes = (s) =>
+    s.replace(/^[\u201C\u201D"']+|[\u201C\u201D"']+$/g, "").trim();
+
+  // v1 standalone markers — "👉 Text:" or "Text:" on its own line
+  const textMarker = /^(?:👉\s*)?Text\s*:?\s*$/;
+  // v1 "👉 Voice:" or "👉 Voice (giọng vui):" — optional direction
+  const voiceMarker = /^(?:👉\s*)?Voice(?:\s*\(([^)]+)\))?\s*:?\s*$/;
+
+  // v2 embedded format — a bold-wrapped quoted string like
+  //   **"👉 ĐÓN XEM TẬP 2: WIFI RỪNG BỊ LAG!"**
+  // Detected by bold markers + smart/straight quotes around CTA-like content.
+  // Uses unicode class matching to handle both " and curly quotes.
+  const v2EmbeddedCta = /^\s*\*\*\s*["\u201C\u201D]([^"\u201C\u201D\n]{5,200})["\u201C\u201D]\s*\*\*\s*$/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // v2: embedded bold-quoted CTA on its own line
+    const v2Match = line.match(v2EmbeddedCta);
+    if (v2Match) {
+      textOverlays.push(v2Match[1].trim());
+      continue;
+    }
+
+    // v1: standalone "Text:" marker + quoted content on next non-empty line
+    if (textMarker.test(line)) {
+      for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+        const next = stripQuotes(lines[j].trim());
+        if (next) {
+          textOverlays.push(next);
+          break;
+        }
+      }
+      continue;
+    }
+
+    // v1: standalone "Voice:" marker
+    const voiceMatch = line.match(voiceMarker);
+    if (voiceMatch) {
+      const direction = voiceMatch[1]?.trim() || null;
+      for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+        const next = stripQuotes(lines[j].trim());
+        if (next) {
+          voiceOvers.push({
+            character: "narrator",
+            text: next,
+            direction,
+          });
+          break;
+        }
+      }
+      continue;
+    }
+  }
+
+  return { textOverlays, voiceOvers };
+}
+
+// Normalize a character name: lowercased, trimmed, alias-resolved.
+// "Voice Over"/"VO" → "narrator" (maps to Charon voice in voices.mjs).
+function normalizeCharacterKey(raw) {
+  if (!raw) return null;
+  const key = raw.toLowerCase().trim();
+  // Alias table — keep in sync with voices.mjs
+  if (key === "voice over" || key === "voiceover" || key === "vo") return "narrator";
+  return key;
+}
+
+// Strip timing prefixes like "giây 6, " from direction strings so TTS
+// receives just the acting direction ("thì thầm", "hét lớn"), not metadata.
+function cleanDialogueDirection(raw) {
+  if (!raw) return null;
+  // Remove "giây N" or "giây N-M" at the start, followed by optional separator
+  const cleaned = raw
+    .replace(/^giây\s+\d+(?:\s*[-–—]\s*\d+)?\s*[,\.\-–—]?\s*/i, "")
+    .trim();
+  return cleaned || null;
+}
+
 function parseDialogue(dialogueText) {
-  // Format:
+  // Supports TWO dialogue formats:
+  //
+  // v1 (multi-line):
   //   **Momo (thì thầm):**
   //   "Đây chắc chắn là..."
   //
-  //   **Bobo:**
-  //   "Momo giấu gì vậy ta?"
+  // v2 (bullet single-line with timing info):
+  //   * **Momo (giây 6, thì thầm):** "Đây chắc chắn là..."
+  //   * **Voice Over (giây 8):** "Đừng bỏ lỡ..."
+  //
+  // v2 direction contains a timing prefix like "giây 6, " which we strip
+  // before passing to TTS. v2 also introduces "Voice Over" character which
+  // is aliased to "narrator" (Charon voice) via normalizeCharacterKey.
   if (!dialogueText) return [];
 
   const lines = dialogueText.split("\n");
@@ -160,25 +359,27 @@ function parseDialogue(dialogueText) {
     if (!line) continue;
 
     // Character line: **Name:** or **Name (direction):**
-    const charMatch = line.match(/^\*\*([^(*]+?)(?:\s*\(([^)]+)\))?:\*\*/);
+    // Allow optional bullet prefix "* " for v2 format.
+    const charMatch = line.match(/^(?:\*\s+)?\*\*([^(*]+?)(?:\s*\(([^)]+)\))?\s*:\*\*/);
     if (charMatch) {
-      currentChar = charMatch[1].trim().toLowerCase();
-      currentDirection = charMatch[2]?.trim() || null;
+      currentChar = normalizeCharacterKey(charMatch[1]);
+      currentDirection = cleanDialogueDirection(charMatch[2]);
       // Sometimes text is on the SAME line after the ":**"
       const rest = line.replace(charMatch[0], "").trim();
       if (rest && rest !== "") {
         const cleaned = rest.replace(/^[\u201C\u201D"']+|[\u201C\u201D"']+$/g, "").trim();
         if (cleaned) {
           result.push({ character: currentChar, text: cleaned, direction: currentDirection });
+          currentDirection = null;
         }
       }
       continue;
     }
 
-    // Bullet line: "* Không cần thoại dài." — skip narrative notes, no char
+    // Bullet line without a character match: skip narrative notes
     if (line.startsWith("*") && !currentChar) continue;
 
-    // Dialogue text line (usually quoted)
+    // Dialogue text line (usually quoted) for v1 multi-line format
     if (currentChar) {
       const cleaned = line.replace(/^[\u201C\u201D"']+|[\u201C\u201D"']+$/g, "").replace(/^\*\s*/, "").trim();
       if (cleaned && !cleaned.startsWith("*")) {
@@ -259,29 +460,38 @@ export function parseEpisode(filePath) {
     }
 
     const goal = extractSection(section, "Mục tiêu");
-    const breakdownText = extractSection(section, "Breakdown theo giây");
+    // "Breakdown" matches both v1 ("### Breakdown theo giây") and v2
+    // ("### Breakdown theo từng giây") — extractSection allows trailing
+    // chars after the prefix name, so passing just "Breakdown" captures
+    // everything until the next ### section.
+    const breakdownText = extractSection(section, "Breakdown");
     const breakdown = parseBreakdown(breakdownText);
     const dialogueText = extractSection(section, "Lời thoại");
-    const dialogue = parseDialogue(dialogueText);
+    const parsedDialogue = parseDialogue(dialogueText);
     const sfxText = extractSection(section, "Âm thanh");
     const sfx = parseSfx(sfxText);
+
+    // Extract CTA text overlays + voice-over narrator lines from breakdown
+    // (for scenes like scene 15 with "👉 Text:" / "👉 Voice:" markers)
+    const { textOverlays: ctaTextOverlays, voiceOvers } =
+      parseCtaFromBreakdown(breakdownText);
+
+    // Narrator voice-overs are appended to dialogue — they go through the
+    // same TTS pipeline as regular dialogue (character: "narrator" → Charon
+    // voice via voices.mjs). They stay in script order, so narrator lines
+    // after character lines play after them in the composer's dialogue loop.
+    const dialogue = [...parsedDialogue, ...voiceOvers];
+
     const characters = extractCharactersFromBreakdown(breakdown, dialogue);
     const visualDescription = breakdown.join(" ") || goal;
 
-    // Detect title scenes — these need FFmpeg text overlay (Vietnamese fonts)
-    // instead of AI-generated text (which fails on non-English).
-    // Title scenes:
-    //   - Scene 1 (always intro/title)
-    //   - Last scene IF its title contains "KẾT" or "CTA"
+    // Detect title scenes — only scene 1 (always intro) is a template-based
+    // title scene. The last scene is rendered from its actual breakdown even
+    // if its heading says "KẾT"/"CTA" — per "bám sát kịch bản" rule, we
+    // never substitute user-authored beats with a generic template.
     const isFirstScene = header.id === 1;
     const isLastScene = idx === sceneSections.length - 1;
-    const looksLikeCTA = /\b(KẾT|CTA|ENDING|OUTRO)\b/i.test(header.title);
-    const isTitle = isFirstScene || (isLastScene && looksLikeCTA);
-
-    // textOverlays will be populated AFTER all scenes are parsed,
-    // by deriving from episode metadata (more reliable than regex on markdown).
-    // Title scenes get default overlays based on scene type.
-    const textOverlays = [];
+    const isTitle = isFirstScene;
 
     return {
       id: header.id,
@@ -299,27 +509,19 @@ export function parseEpisode(filePath) {
       isTitle,
       isFirstScene,
       isLastScene,
-      textOverlays,
+      textOverlays: ctaTextOverlays, // from script breakdown; scene 1 overwrites below
     };
   });
 
-  // Post-process: derive title overlays from episode metadata
-  // This is more reliable than regex parsing of free-form markdown
+  // Post-process: scene 1 always uses template-based text overlays
+  // (series branding) regardless of breakdown content. Other scenes keep
+  // whatever parseCtaFromBreakdown extracted (empty array if no CTA markers).
   const SERIES_TITLE = "🌳 RỪNG XÌ TIN";
   for (const scene of scenes) {
-    if (!scene.isTitle) continue;
-
     if (scene.isFirstScene) {
-      // Intro: series logo + episode subtitle
       scene.textOverlays = [
         SERIES_TITLE,
         `TẬP ${episodeNumber}: ${episodeTitle}`,
-      ];
-    } else if (scene.isLastScene) {
-      // CTA: pointer to next episode (assume sequential)
-      scene.textOverlays = [
-        `👉 ĐÓN XEM TẬP ${episodeNumber + 1}`,
-        "Nhớ theo dõi nhé!",
       ];
     }
   }

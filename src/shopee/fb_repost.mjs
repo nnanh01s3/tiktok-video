@@ -168,12 +168,18 @@ async function withChrome(url, fn) {
 }
 
 // ── Step 1: Scrape video IDs ──────────────────────────────────────────────
-async function getNewVideos(processedIds) {
-  log(`🔍 Scrape: ${SOURCE_PAGE}`);
+//
+// Takes `sourcePageUrl` as parameter so the main flow can call it with
+// different sources in fallback order (instead of relying on the const
+// SOURCE_PAGE). This enables trying multiple sources when the first one
+// has no new videos — e.g. afternoon daily hits the same source as morning
+// daily because rotation is 4-hourly.
+async function getNewVideos(processedIds, sourcePageUrl) {
+  log(`🔍 Scrape: ${sourcePageUrl}`);
   const videos = [];
 
   try {
-    const result = await withChrome(SOURCE_PAGE, async (cdp) => {
+    const result = await withChrome(sourcePageUrl, async (cdp) => {
       await sleep(5000);
 
       // Scroll để load thêm bài
@@ -309,23 +315,48 @@ async function uploadAndPost(videoPath, caption, delayMinutes = 1) {
 // ── Main ──────────────────────────────────────────────────────────────────
 log("=".repeat(60));
 log(`🚀 FB REPOST → SƯU TẦM HÀNG DỊ`);
-log(`📌 Source: [${sourceIdx}] ${SOURCE_PAGE}`);
+log(`📌 Primary source: [${sourceIdx}] ${SOURCE_PAGE}`);
 log("=".repeat(60));
 
 const state = loadProcessed();
 log(`📋 Đã xử lý: ${state.processed_ids.length} videos`);
 
-const newVideos = await getNewVideos(state.processed_ids);
+// Fallback source loop: try the rotation-picked source first, then fall
+// through to subsequent sources (circularly) until we have enough new videos
+// or we've tried them all.
+//
+// Why: rotation is 4-hourly (`Date.now() / 4h % 5`) so morning + afternoon
+// runs within the same window hit the SAME source. If morning already
+// reposted everything new from that source, afternoon gets 0. Falling
+// through keeps content flowing while preserving rotation's goal of
+// distributing load across 5 sources over time.
+const newVideos = [];
+const triedSources = [];
+for (let step = 0; step < SOURCE_PAGES.length; step++) {
+  if (newVideos.length >= MAX_VIDEOS) break;
+
+  const idx = (sourceIdx + step) % SOURCE_PAGES.length;
+  const sourcePage = SOURCE_PAGES[idx];
+  triedSources.push(idx);
+
+  const found = await getNewVideos(state.processed_ids, sourcePage);
+  if (found.length > 0) {
+    log(`   ➕ [${idx}] +${found.length} new videos`);
+    // Attach source index to each video so downstream can log correctly
+    for (const v of found) v._sourceIdx = idx;
+    newVideos.push(...found);
+  }
+}
 
 if (newVideos.length === 0) {
-  log("✅ Không có video mới.");
+  log(`✅ Không có video mới từ ${triedSources.length} sources thử được.`);
   state.last_check = new Date().toISOString();
   saveProcessed(state);
   process.exit(0);
 }
 
 const toProcess = newVideos.slice(0, MAX_VIDEOS);
-log(`📌 Xử lý ${toProcess.length} video mới...`);
+log(`📌 Xử lý ${toProcess.length} video mới (từ ${triedSources.length} sources thử được)...`);
 
 let success = 0;
 for (let i = 0; i < toProcess.length; i++) {
@@ -343,8 +374,12 @@ for (let i = 0; i < toProcess.length; i++) {
     const caption = makeCaption(video.title, video.description);
     log(`   📝 Caption: "${caption.slice(0, 60)}..."`);
 
+    // Check if THIS video's source is in the "also post TikTok" allowlist.
+    // (Previously used the global SOURCE_PAGE const; with fallback sources
+    // across multiple pages, we need the per-video source URL.)
+    const videoSourceUrl = SOURCE_PAGES[video._sourceIdx ?? sourceIdx];
     const isSpecialPage = ALSO_POST_TIKTOK.some(
-      p => SOURCE_PAGE.includes(p.split("?")[0]) || SOURCE_PAGE === p
+      p => videoSourceUrl.includes(p.split("?")[0]) || videoSourceUrl === p
     );
     await uploadAndPost(videoPath, caption, BASE_DELAY + 1 + i * 5, false);
 

@@ -68,14 +68,26 @@ export const MASTER_NEGATIVE_PROMPT =
   "realistic, photorealistic, scary, dark, horror, low quality, blurry, distorted, " +
   "extra limbs, text, watermark, logo";
 
+// Character name aliases — map common script variants to canonical keys.
+// Keep in sync with parseDialogue → normalizeCharacterKey in scene-parser.mjs
+// (parser normalizes before reaching here, but this is a safety net for
+// any direct getCharacter() callers that don't go through the parser).
+const CHARACTER_ALIASES = {
+  "voice over": "narrator",
+  "voiceover": "narrator",
+  "vo": "narrator",
+};
+
 /**
  * Lookup a character by lowercase name/key. Case-insensitive.
+ * Applies alias resolution (e.g. "Voice Over" → "narrator").
  * @param {string} name
  * @returns {typeof CHARACTERS[CharacterKey] | null}
  */
 export function getCharacter(name) {
   if (!name) return null;
-  const key = name.toLowerCase().trim();
+  let key = name.toLowerCase().trim();
+  key = CHARACTER_ALIASES[key] || key;
   return CHARACTERS[key] || null;
 }
 

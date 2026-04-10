@@ -121,9 +121,71 @@ console.log("📡 Loading Shopee Affiliate...");
 await cdp("Page.navigate", { url: "https://affiliate.shopee.vn/offer/product_offer" });
 await sleep(5000);
 
-// Check if page loaded
+// Check if page loaded — empty title = redirected to login or blocked
 const titleResult = await cdp("Runtime.evaluate", { expression: "document.title", returnByValue: true });
-console.log("📄 Page:", titleResult?.result?.value);
+const pageTitle = titleResult?.result?.value || "";
+console.log(`📄 Page: "${pageTitle}"`);
+
+if (!pageTitle || pageTitle.trim().length < 3) {
+  console.error("❌ Shopee affiliate page didn't load — likely cookies expired or anti-bot block.");
+  console.error("   Check: (1) data/shopee/cookies.txt is fresh, (2) visit https://affiliate.shopee.vn manually to re-auth.");
+  // Don't exit — let the fetch loop run and fail cleanly. Parent script
+  // (daily.mjs) will keep existing cache via the "0 products fetched" path.
+  // Exit code 0 so daily.mjs continues to FB scripts with stale cache.
+}
+
+// ── CDP result parsing helper ──────────────────────────────────────────
+// Defensive JSON parser for CDP Runtime.evaluate results.
+// Handles all edge cases:
+//   1. Expression threw → CDP returns exceptionDetails → throw with error
+//   2. Promise rejected (awaitPromise=true) → same path
+//   3. Value is a string → JSON.parse it (normal path)
+//   4. Value is already an object → CDP deep-copied it, use as-is
+//   5. Value is undefined/null → fetch failed, throw
+//
+// Previously assumed value is always a string, but CDP can return an object
+// when the fetched response body is non-text or when Shopee's anti-bot shim
+// replaces fetch() with something returning objects. The "[object Object]"
+// is not valid JSON error happened because JSON.parse(someObject) coerces
+// to "[object Object]" string first, then fails to parse that.
+async function cdpFetchJson(expression) {
+  const res = await cdp("Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+
+  if (res?.exceptionDetails) {
+    const msg = res.exceptionDetails.exception?.description
+      || res.exceptionDetails.text
+      || "unknown CDP exception";
+    throw new Error(`CDP exception: ${msg.slice(0, 200)}`);
+  }
+
+  const raw = res?.result?.value;
+  const resultType = res?.result?.type;
+
+  if (raw === undefined || raw === null) {
+    throw new Error(`CDP returned empty value (type=${resultType})`);
+  }
+
+  // CDP already deep-copied non-primitives → use directly, skip JSON.parse
+  if (typeof raw === "object") {
+    return raw;
+  }
+
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      // Log first 300 chars of raw value to help debugging
+      const preview = raw.slice(0, 300).replace(/\s+/g, " ");
+      throw new Error(`Invalid JSON from CDP (type=${resultType}): ${preview}`);
+    }
+  }
+
+  throw new Error(`Unexpected CDP value type: ${typeof raw} (cdp type=${resultType})`);
+}
 
 // Fetch products from multiple categories
 const ALL_CATS = [100630, 100632, 100633, 100635, 100636, 100637, 100638, 100639, 100640, 100641, 100642];
@@ -137,14 +199,10 @@ const allProducts = [];
 // Bestsellers
 console.log("\n🔥 Fetching bestsellers...");
 try {
-  const result = await cdp("Runtime.evaluate", {
-    expression: `(async () => {
-      const r = await fetch("${API_BASE}/offer/product/list?list_type=2&sort_type=1&page_offset=0&page_limit=20&client_type=1", { credentials: "include" });
-      return await r.text();
-    })()`,
-    awaitPromise: true, returnByValue: true,
-  });
-  const data = JSON.parse(result?.result?.value);
+  const data = await cdpFetchJson(`(async () => {
+    const r = await fetch("${API_BASE}/offer/product/list?list_type=2&sort_type=1&page_offset=0&page_limit=20&client_type=1", { credentials: "include" });
+    return await r.text();
+  })()`);
   if (data.code === 0 && data.data?.list) {
     console.log(`   ✅ ${data.data.list.length} bestsellers`);
     for (const item of data.data.list) {
@@ -159,14 +217,10 @@ try {
 for (const catId of catFilter) {
   console.log(`📦 Category ${catId}...`);
   try {
-    const result = await cdp("Runtime.evaluate", {
-      expression: `(async () => {
-        const r = await fetch("${API_BASE}/offer/product/list?list_type=0&match_type=2&match_id=${catId}&sort_type=1&page_offset=0&page_limit=20&client_type=1", { credentials: "include" });
-        return await r.text();
-      })()`,
-      awaitPromise: true, returnByValue: true,
-    });
-    const data = JSON.parse(result?.result?.value);
+    const data = await cdpFetchJson(`(async () => {
+      const r = await fetch("${API_BASE}/offer/product/list?list_type=0&match_type=2&match_id=${catId}&sort_type=1&page_offset=0&page_limit=20&client_type=1", { credentials: "include" });
+      return await r.text();
+    })()`);
     if (data.code === 0 && data.data?.list) {
       console.log(`   ✅ ${data.data.list.length} products`);
       for (const item of data.data.list) {

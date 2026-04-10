@@ -42,40 +42,99 @@
 * Ưu tiên expression lớn, gesture rõ, motion liên tục.
 ---
 
-## 🎬 SCENE 01 - MỞ ĐẦU + TITLE
+## 🎬 SCENE 01 - MỞ ĐẦU + TITLE (CINEMATIC PRO)
 
 ⏱ 0:00 - 0:08
 
-### Mục tiêu
+### 🎯 Mục tiêu
 
-* Tạo cinematic opening
-* Giới thiệu thương hiệu + tập + tiêu đề
+* Tạo cảm giác “wow” ngay 2 giây đầu
+* Establish thế giới
+* Gắn branding mạnh
 
-### Breakdown theo giây
+---
 
-* **Giây 1–2:** Toàn cảnh Trái Đất từ không gian, ánh sáng mặt trời chiếu nhẹ → camera lao nhanh xuống một vùng xanh.
+### 🎥 Breakdown theo giây (CHI TIẾT)
 
-* **Giây 3–4:** Camera xuyên qua mây, zoom vào khu rừng rực rỡ (thác nước, cầu gỗ, hoa, bướm bay).
+**Giây 1–2: (EXTREME WIDE - SPACE SHOT)**
 
-* **Giây 5–6:** Camera lướt dọc con suối → một bảng gỗ hiện ra giữa rừng.
+* Camera: góc rất rộng (extreme wide), nhìn Trái Đất từ không gian
+* Ánh sáng: mặt trời ló phía sau, tạo viền sáng (rim light)
+* Camera bắt đầu **zoom-in cực nhanh (push-in + slight rotation)**
+* Hiệu ứng: cloud layer mờ phía trước
 
-* **Giây 6–7:** Text/Logo hiện trên bảng:
-  👉 “🌳 RỪNG XÌ TIN” (logo chính, nổi bật, màu tươi)
+---
 
-* **Giây 7–8:** Text phụ fade in bên dưới:
-  👉 “TẬP 1: QUẢ CHUỐI BÍ ẨN 🍌”
+**Giây 3–4: (FAST DESCENT - CLOUD PASS)**
 
-→ phía xa vang lên tiếng Momo cười: “Hehe…”
+* Camera xuyên qua mây (transition mềm, motion blur nhẹ)
+* Reveal: khu rừng cực kỳ rực rỡ
+* Thấy:
+
+  * thác nước đổ xuống
+  * cầu gỗ nhỏ
+  * chim bay ngang ống kính (foreground motion)
+
+👉 Camera tiếp tục **dive xuống + tilt nhẹ**
+
+---
+
+**Giây 5–6: (LOW ALTITUDE TRACKING)**
+
+* Camera bay thấp dọc theo con suối (tracking shot)
+* Nước phản chiếu ánh sáng lấp lánh
+* Bướm bay ngang gần camera → tạo chiều sâu
+
+👉 Cuối giây 6: bảng gỗ bắt đầu xuất hiện từ bên phải frame
+
+---
+
+**Giây 6–7: (LOGO REVEAL - FOCUS SHIFT)**
+
+* Camera chậm lại → focus pull từ background → bảng gỗ
+* Logo bật ra với hiệu ứng bounce nhẹ:
+
+👉 “🌳 RUNG XI TIN”
+
+* Góc máy: hơi low angle để logo “oai” hơn
+
+---
+
+**Giây 7–8: (TITLE LOCK-IN)**
+
+* Text phụ fade-in bên dưới:
+
+👉 “TẬP 1: QUẢ CHUỐI BÍ ẨN 🍌”
+
+* Camera giữ ổn định 0.5s (để người xem đọc)
+
+👉 Cuối frame:
+
+* Offscreen: tiếng Momo cười “Hehe…”
+* Lá rung nhẹ → hint có chuyện sắp xảy ra
+
+---
+
+### 🔊 Âm thanh
+
+* Nhạc: cinematic → chuyển playful
+* SFX:
+
+  * gió nhẹ
+  * chim
+  * sparkle khi logo xuất hiện
 
 ### Hình ảnh
 
 * Logo kiểu gỗ, vui nhộn
 * Text có bounce nhẹ, hoạt hình
+---
 
-### Âm thanh
+### ⚠️ Lưu ý Veo
 
-* Nhạc mở đầu kỳ diệu → chuyển vui nhộn
-* SFX sparkle khi hiện chữ
+* Motion liên tục (không đứng frame)
+* Có foreground + background để tạo depth
+
 
 ---
 
@@ -92,12 +151,8 @@ Hook người xem bằng hành động lén lút của Momo.
 * **Giây 1–2:** Cận cảnh hai bàn tay Momo đang ôm một quả chuối vàng óng, sáng nổi bật hơn bình thường.
 * **Giây 3–4:** Camera ngẩng lên, lộ khuôn mặt Momo nhìn trái, nhìn phải, mắt đảo liên tục rất khả nghi.
 * **Giây 5–6:** Momo kéo quả chuối sát ngực, cúi người, thì thầm như sợ ai nghe thấy.
+	Lời thoại của Momo (thì thầm):	“Đây chắc chắn là báu vật hiếm nhất khu rừng…”
 * **Giây 7–8:** Momo nhón chân chạy vụt khỏi khung hình, lá cây rung lên sau lưng.
-
-### Lời thoại
-
-**Momo (thì thầm):**
-“Đây chắc chắn là báu vật hiếm nhất khu rừng…”
 
 ### Âm thanh
 
@@ -119,12 +174,8 @@ Cho Bobo vô tình phát hiện, tạo mầm hiểu lầm.
 * **Giây 1–2:** Góc máy sau thân cây, Bobo lấp ló nửa mặt, mắt tròn xoe.
 * **Giây 3–4:** Bobo nghiêng đầu, cố nhìn theo hướng Momo vừa chạy.
 * **Giây 5–6:** Bobo bước ra một chút, gãi đầu, vẻ mặt vừa ngơ vừa tò mò.
+	Lời thoại của Bobo: “Momo giấu gì vậy ta?”
 * **Giây 7–8:** Bobo há miệng kinh ngạc như vừa nghĩ ra chuyện cực lớn.
-
-### Lời thoại
-
-**Bobo:**
-“Momo giấu gì vậy ta?”
 
 ### Âm thanh
 
@@ -445,45 +496,118 @@ Bẻ mạnh sang hỗn loạn.
 
 ---
 
-## 🎬 SCENE 15 - KẾT + CTA (UPDATED)
+## 🎬 SCENE 15 - CHASE + CTA (HIGH ENERGY)
 
 ⏱ 1:52 - 2:00
 
-### Mục tiêu
+### 🎯 Mục tiêu
 
-* Kết thúc hài
-* Gắn CTA kéo người xem sang tập sau
+* Tạo cao trào cuối
+* Nhịp nhanh, dồn dập
+* Kết thúc bằng energy cao + CTA
 
-### Breakdown theo giây
+---
 
-* **Giây 1–2:** Cận cảnh Bobo đang ngậm nửa quả chuối, mặt ngây thơ nhưng ăn rất ngon.
+### 🎥 Breakdown theo giây (CHI TIẾT)
 
-* **Giây 3–4:** Tiko bước vào giữa khung hình, chỉnh kính, nói chậm rãi.
+**Giây 1–2: (CLOSE-UP COMEDIC)**
 
-* **Giây 5–6:** Momo lao vào rượt Bobo, Lala hét theo phía sau.
+* Camera: close-up mặt Bobo
+* Bobo đang nhai chuối, má phồng, mắt đảo loạn
+* Một miếng chuối rơi ra chậm (comic detail)
 
-* **Giây 6–7:** Freeze frame giữa cảnh rượt đuổi (pose hài nhất).
+👉 Background bắt đầu rung nhẹ (Momo lao tới)
 
-* **Giây 7–8:** Text hiện lên + voice over:
+---
 
-  👉 Text:
-  “👉 ĐÓN XEM TẬP 2: WIFI RỪNG BỊ LAG!”
+**Giây 3–4: (WHIP PAN TRANSITION)**
 
-  👉 Voice (giọng vui):
-  “Đừng bỏ lỡ tập tiếp theo nhé!”
+* Camera whip pan sang trái cực nhanh
 
-### Lời thoại
+* Reveal Momo đang lao tới full speed
 
-**Tiko:**
-“Chậm mà chắc… đừng suy diễn.”
+* Góc máy: **low angle → Momo trông hung hăng hơn**
 
-**Momo:**
+💬 Momo hét:
 “TRẢ CHUỐI ĐÂY!!!”
 
-### Âm thanh
+---
 
-* Nhạc vui cao trào
-* SFX chạy + tiếng lá
-* “pop” khi hiện CTA
+**Giây 4–5: (FAST TRACKING - CHASE START)**
 
+* Camera tracking ngang
+
+* Bobo quay đầu → giật mình → chạy
+
+* Động tác exaggerated (tay chân vung loạn)
+
+* Lala phía sau:
+  “Ê!!! Đợi tui!!!”
+
+---
+
+**Giây 5–6: (CHAOTIC MULTI-LAYER ACTION)**
+
+* Camera handheld nhẹ (tạo cảm giác hỗn loạn)
+
+* 3 lớp chuyển động:
+
+  * foreground: cây lướt qua
+  * mid: Bobo chạy
+  * back: Momo rượt sát
+
+* Bobo vấp đá → suýt ngã → recover
+
+---
+
+**Giây 6–7: (COMEDIC CHAOS PEAK)**
+
+* Lala nhảy qua Bobo → bị kéo theo → 2 đứa xoắn vào nhau
+* Tiko vẫn chạy chậm phía sau, rất bình tĩnh
+
+💬 Tiko (giọng đều):
+“Chậm mà chắc…”
+
+---
+
+**Giây 7–8: (FREEZE FRAME + CTA IMPACT)**
+
+* Freeze đúng frame:
+
+  * Momo bay giữa không trung
+  * Bobo hoảng loạn
+  * Lala xoắn
+  * Tiko phía sau
+
+👉 Zoom nhẹ vào frame (impact)
+
+### TEXT HIỆN:
+
+👉 “ĐÓN XEM TẬP 2: WIFI RỪNG BỊ LAG!”
+
+### VOICE OVER:
+
+“Đừng bỏ lỡ tập tiếp theo nhé!”
+
+---
+
+### 🔊 Âm thanh
+
+* Nhạc: tăng tempo → cao trào
+* SFX:
+
+  * chạy “whoosh whoosh”
+  * vấp “bonk”
+  * freeze “pop”
+
+---
+
+### ⚠️ Lưu ý Veo
+
+* Scene này phải **motion liên tục 100%**
+* Không frame nào đứng >0.5s
+* Ưu tiên:
+
+  * exaggeration
+  * overlapping action
 ---

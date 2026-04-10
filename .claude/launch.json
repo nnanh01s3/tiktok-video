@@ -1,0 +1,47 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scheduler",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/index.js"],
+      "port": 3000
+    },
+    {
+      "name": "daily-run",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/daily.mjs"],
+      "port": 3001
+    },
+    {
+      "name": "tiktok-pipeline",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/pipeline-quotes-veo.js", "--dry-run"],
+      "port": 3002
+    },
+    {
+      "name": "shopee-reup",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/shopee/reup.mjs", "--page", "shopee"],
+      "port": 3003
+    },
+    {
+      "name": "fb-repost",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/shopee/fb_repost.mjs", "--max", "2"],
+      "port": 3004
+    },
+    {
+      "name": "trending-repost",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/shopee/trending_repost.mjs", "--dry-run"],
+      "port": 3005
+    },
+    {
+      "name": "tiktok-direct-test",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/tiktok-direct.mjs", "--test", "data/tiktok/test_video.mp4"],
+      "port": 3006
+    }
+  ]
+}
