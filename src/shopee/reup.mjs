@@ -379,7 +379,13 @@ for (let i = 0; i < toProcess.length; i++) {
       || genCaptionFallback(p.name, pageName, niche);
     log(`   📝 "${caption.slice(0, 80)}..."`);
 
-    const result = await postVideo(processed, caption, p, doneToday + success);
+    // slotIdx is RELATIVE to this run (0, 1) — not cumulative across all
+    // runs today. Passing `doneToday + success` was the legacy "spread
+    // across day" behavior where morning videos used slots 0,1 and
+    // afternoon used slots 2,3 etc. That conflicts with the "post within
+    // 15 min per run" requirement — cumulative offset pushes afternoon
+    // delays past the 15-min window. Fix: use `success` alone (0 or 1).
+    const result = await postVideo(processed, caption, p, success);
 
     state.posts_today.push({
       ...result,
