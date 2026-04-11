@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "seed": "node scripts/seed-quotes.js",
-    "test:pipeline": "node src/pipeline-quotes.js --dry-run",
+    "test:pipeline": "node src/pipeline-quotes-veo.js --dry-run",
     "test:db": "node scripts/verify-db.js"
   },
   "dependencies": {

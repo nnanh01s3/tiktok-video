@@ -2,14 +2,12 @@
  * TikTokBot — Main entry point.
  *
  * Scheduler: 3 posts/day at peak VN hours (6:00AM, 11:50AM, 6:00PM ICT).
- * Pipeline: tries Veo first, falls back to FFmpeg slideshow on quota errors.
- * TTS: evening slot uses ElevenLabs (premium), others use Edge TTS (free).
+ * Pipeline: Veo hook (cheapest model) + Imagen slides + Ken Burns.
+ * TTS: Gemini TTS (Algenib) primary, Edge TTS fallback.
  */
-import dotenv from "dotenv";
-dotenv.config({ path: "./config/.env" });
+import "./env.js";
 import cron from "node-cron";
 import { runPipeline as runVeoPipeline } from "./pipeline-quotes-veo.js";
-// import { runPipeline as runFFmpegPipeline } from "./pipeline-quotes.js"; // TẠM TẮT — dùng Imagen thay thế
 import { getDb, getQuoteStats, getPendingJobs } from "./db.js";
 
 const TIMEZONE = "Asia/Ho_Chi_Minh";

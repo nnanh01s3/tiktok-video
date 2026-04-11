@@ -115,19 +115,62 @@ QUY TẮC KỊCH BẢN:
 - Giọng: tự tin, sâu lắng, truyền cảm hứng
 - PHẢI viết tiếng Việt có dấu đầy đủ
 
-QUY TẮC CẢNH QUAY (scenes):
-- Mỗi quote cần 1 mô tả cảnh quay KHÁC NHAU bằng tiếng Anh
-- Cảnh phải LIÊN QUAN TRỰC TIẾP đến ý nghĩa của quote
-- Ví dụ: quote về "vượt qua thất bại" → cảnh phoenix rising from ashes, NOT biển yên tĩnh
-- Ví dụ: quote về "thời gian" → cảnh hourglass hoặc sunset timelapse, NOT rừng cây
+QUY TẮC CAPTION:
+- Dòng 1: Tiêu đề ngắn gọn 3-6 từ diễn tả nội dung video (KHÔNG lặp lại tên category)
+  + VD: "Sức mạnh từ bên trong", "Khi nỗi sợ trở thành động lực", "Bài học ngàn năm còn đúng"
+- Dòng 2 (xuống dòng): Mô tả hấp dẫn 1-2 câu + emoji + hashtags
+- Ví dụ hoàn chỉnh:
+  "Nghị lực thép\nKhông phải không ngã, mà là luôn biết đứng dậy 💪 #nghiluc #phatgiao #mandela"
+
+QUY TẮC HOOK — TUYỆT ĐỐI KHÔNG LẶP:
+- CẤM các mẫu câu hook sau (quá nhàm chán):
+  + "Bạn có biết..."
+  + "Bạn có bao giờ..."
+  + "Có bao giờ bạn..."
+  + "Bạn đã bao giờ..."
+  + "Có bao nhiêu lần..."
+  + Bất kỳ câu hỏi yes/no dạng "Bạn có [verb]..."
+- THAY BẰNG các kiểu hook sáng tạo hơn:
+  + Tuyên bố gây sốc: "Người ta nói sai hết về [chủ đề]."
+  + Mâu thuẫn: "Càng cố gắng, bạn càng thất bại — và đó chính là bí mật."
+  + Câu chuyện ngắn: "Năm 1945, một người đàn ông gầy gò bước lên bục..."
+  + Trích dẫn trực tiếp: Mở đầu bằng chính câu quote mạnh nhất
+  + Thách thức: "Thử đọc hết video này mà không thay đổi suy nghĩ."
+  + Sự thật bất ngờ: "90% người giàu có một điểm chung duy nhất."
+  + Hình ảnh mạnh: "Hãy tưởng tượng bạn đang đứng trước vực thẳm..."
+
+QUY TẮC HÁN-VIỆT:
+- Nếu câu nói gốc chứa từ Hán-Việt khó hiểu (ví dụ: "tri hành hợp nhất", "tinh tấn", "khí tiết"), PHẢI giải thích ngắn gọn trong kịch bản ngay sau khi trích dẫn
+- Ví dụ: "Tri hành hợp nhất — nghĩa là hiểu biết và hành động phải đi đôi với nhau."
+- Ví dụ: "Tinh tấn — tức là nỗ lực không ngừng nghỉ."
+- KHÔNG bỏ qua, KHÔNG giả định người xem hiểu Hán-Việt
+- Giải thích tự nhiên, không cứng nhắc, hòa vào mạch kể chuyện
+
+QUY TẮC CẢNH QUAY (scenes) — HÌNH ẢNH PHẢI KHỚP VỚI NỘI DUNG:
+- Mỗi quote sẽ được HIỂN THỊ dưới dạng text overlay trên hình nền
+- Hình nền (scene) PHẢI minh họa CHÍNH XÁC nội dung quote đang hiển thị
+- CÁCH LÀM ĐÚNG:
+  + Đọc quote → xác định HÌNH ẢNH CỤ THỂ được nhắc đến hoặc ẩn dụ trong quote
+  + Quote "Lá lành đùm lá rách" → hình lá xanh che chở lá héo trong mưa
+  + Quote "Thời gian là vàng" → cát vàng chảy trong đồng hồ cát cổ
+  + Quote "Tri hành hợp nhất" → người vừa đọc sách vừa thực hành (ví dụ: thợ mộc đọc bản vẽ rồi đẽo gỗ)
+  + Quote về Trần Hưng Đạo → cảnh quân đội Việt cổ, sông Bạch Đằng
+- CÁCH LÀM SAI (TRÁNH):
+  + Quote cụ thể về chiến tranh → hình generic bình minh yên tĩnh
+  + Quote về kỷ luật → hình chim bay trên biển (không liên quan)
+  + Quote về lòng nhân ái → hình núi non hùng vĩ (generic)
+  + Dùng hình "đẹp nhưng vô nghĩa" không liên quan đến nội dung
 - MỖI cảnh phải KHÁC BIỆT về địa điểm, ánh sáng, tông màu
 - Phải có sự tiến triển hình ảnh: cảnh 1 tối/mơ hồ → cảnh cuối sáng/rõ ràng
-- Format: "Vertical 9:16 video. [mô tả cảnh]. No text, no people talking. Cinematic, smooth camera movement."
+- Format: "Vertical 9:16 video. [mô tả cảnh CỤ THỂ matching quote content]. No text, no people talking. Cinematic, smooth camera movement."
 
 QUY TẮC HOOK VIDEO (hookVeoPrompt) — Veo 3.1 với ÂM THANH tự nhiên:
 - Tạo 1 prompt cho video MỞ ĐẦU 8 giây bằng Veo 3.1 (model có tạo ÂM THANH sống động)
 - Cảnh phải THỂ HIỆN TRỰC TIẾP chủ đề chính xuyên suốt các câu nói:
-  + Đọc TẤT CẢ quotes → xác định CHỦ ĐỀ CỐT LÕI → tạo cảnh BIỂU TƯỢNG cho chủ đề đó, có thể chuyển nhiều cảnh tương ứng với từng câu nói
+  + Đọc TẤT CẢ quotes → xác định CHỦ ĐỀ CỐT LÕI → tạo cảnh BIỂU TƯỢNG cụ thể cho chủ đề đó
+  + KHÔNG dùng cảnh generic (temple, sunset, mountain) nếu không liên quan trực tiếp
+  + VÍ DỤ ĐÚNG: quotes về nghị lực → chiến binh đứng dậy sau trận chiến, KHÔNG phải cảnh bình minh đẹp
+  + VÍ DỤ ĐÚNG: quotes về thời gian → đồng hồ cát khổng lồ với cát chảy, KHÔNG phải temple vô hồn
 - ÂM THANH SỐNG ĐỘNG (ambient sound, KHÔNG phải nhạc nền):
   + BẮT BUỘC ghi rõ âm thanh trong prompt: "Sound of..." hoặc "Audio: ..."
   + Ưu tiên: tiếng thiên nhiên (sóng, gió, mưa, sấm), tiếng bước chân, tiếng nước chảy, tiếng thành phố — tạo immersive experience
@@ -144,7 +187,7 @@ QUY TẮC HOOK VIDEO (hookVeoPrompt) — Veo 3.1 với ÂM THANH tự nhiên:
 Return JSON:
 {
   "script": "Toàn bộ kịch bản thuyết minh tiếng Việt...",
-  "caption": "Caption TikTok tiếng Việt (dưới 150 ký tự)",
+  "caption": "Tiêu đề ngắn 3-6 từ (VD: 'Sức mạnh của nghị lực', 'Bài học từ thất bại')\\nMô tả hấp dẫn 1-2 câu + hashtags",
   "hookLine": "Câu đầu tiên (hook)",
   "estimatedSeconds": number,
   "hookVeoPrompt": "Vertical 9:16 cinematic video, 8 seconds. [detailed scene in English matching quote themes]. Camera: [specific movement]. Sound: [specific natural ambient sounds]. Mood: [emotion]. Hyperrealistic, film grain, no text overlay, no speech, no background music.",

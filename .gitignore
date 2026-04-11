@@ -25,5 +25,14 @@ docker-compose.yml
 Thumbs.db
 .DS_Store
 
-# Misc
-data;C
+# Cookies & secrets
+config/shopee_cookie.txt
+
+# Data directory (cache, Chrome profiles, state files)
+data/
+
+# Backup code
+backup_code/
+
+# Rừng Xì Tin generated output (videos, audio, intermediate assets)
+vung/output/

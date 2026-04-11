@@ -1,14 +1,17 @@
 /**
- * Quotes Pipeline with Veo 3.1 — Cinematic AI-generated videos.
+ * Quotes Pipeline — AI-generated motivation videos (cost-priority).
+ *
+ * Strategy: Veo for hook only (8s opening), Imagen + Ken Burns for slides.
+ * This keeps cost low (~$0.12/video without Veo hook, ~$1.32 with Veo hook).
  *
  * Flow:
- *   1. Select unused quotes from DB
- *   2. Generate narration script (Claude) in Vietnamese
- *   3. Generate voiceover audio (ElevenLabs/Edge TTS)
- *   4. Generate scene videos with Veo 3.1 (one 8s clip per quote)
- *   5. Compose final video: slow-mo clips + text overlay + voiceover (FFmpeg)
- *   6. Upload & schedule on TikTok (PostFast)
- *   7. Update DB tracking
+ *   1. Select 4 unused quotes from DB (10 Vietnamese categories)
+ *   2. Claude Sonnet 4 → narration script + scene directions (director mode)
+ *   3. Gemini TTS (Algenib voice) → voiceover, fallback Edge TTS
+ *   4. Veo 2.0/3.x → 8s cinematic hook clip (if quota available, cheapest model first)
+ *   5. Imagen 4.0 → 4 scene images + Ken Burns/Parallax effects → video clips
+ *   6. FFmpeg → compose: title + hook + slides + xfade transitions + text overlay + audio mix
+ *   7. PostFast → upload S3 + schedule TikTok
  *
  * Usage:
  *   node src/pipeline-quotes-veo.js                      # Full pipeline
@@ -19,7 +22,7 @@
  */
 import "./env.js";
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, readdirSync, statSync } from "fs";
 import { execSync, spawn } from "child_process";
 
 import { getUnusedQuotes, markQuotesUsed, createVideoJob, updateVideoStatus, getActiveHashtags } from "./db.js";
@@ -27,7 +30,8 @@ import { writeScript, writeDirectorScript } from "./script-writer.js";
 import { generateVoiceover } from "./tts.js";
 import { generateVideo, buildScenePrompts, pickAvailableModel } from "./veo.js";
 import { generateImage } from "./imagen.js";
-import { uploadVideo, schedulePost, getTikTokAccounts } from "./postfast.js";
+import { createPoster } from "./social-poster.js";
+import { TIKTOK_QUOTES_CONFIG } from "./shopee/config.mjs";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const STEP = process.argv.find((a) => a.startsWith("--step="))?.split("=")[1];
@@ -570,6 +574,26 @@ async function composeVideo(veoClips, quotes, audioPath, outputPath, hookClipPat
   return { duration: totalDuration, path: outputPath };
 }
 
+/**
+ * Clean up stale temp files in queue/ from crashed pipeline runs.
+ * Removes files older than 24 hours that match temp patterns.
+ */
+function cleanupQueue() {
+  if (!existsSync(QUEUE_DIR)) return;
+  const maxAge = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  try {
+    for (const file of readdirSync(QUEUE_DIR)) {
+      if (file.startsWith("_vq") || file.startsWith("_veofilter") || file.endsWith("-director.json")) {
+        const fp = `${QUEUE_DIR}/${file}`;
+        if (now - statSync(fp).mtimeMs > maxAge) {
+          unlinkSync(fp);
+        }
+      }
+    }
+  } catch {}
+}
+
 export async function runPipeline(opts = {}) {
   const jobId = `veo-${Date.now()}-${randomUUID().slice(0, 8)}`;
   const category = pickCategory();
@@ -771,7 +795,7 @@ export async function runPipeline(opts = {}) {
   // --- Step 5: Compose final video ---
   log("Step 5: Composing final video...");
   const videoPath = `${QUEUE_DIR}/${jobId}.mp4`;
-  const titleText = scriptResult.hookLine || null;
+  const titleText = scriptResult.caption?.split("\n")[0] || scriptResult.hookLine || null;
   const videoResult = await composeVideo(veoClips, quotes, audioPath, videoPath, hookClipPath, titleText);
   log(`Final video: ${videoResult.duration.toFixed(1)}s at ${videoPath}`);
 
@@ -786,15 +810,15 @@ export async function runPipeline(opts = {}) {
   log("Step 6: Uploading to PostFast...");
   updateVideoStatus(jobId, "uploading");
 
-  const accounts = await getTikTokAccounts();
-  if (accounts.length === 0) {
-    log("ERROR: No TikTok accounts connected in PostFast");
+  const quotePoster = createPoster(TIKTOK_QUOTES_CONFIG); // Tuệ Đàm — chỉ quotes, không Shopee
+  if (!quotePoster.getTikTokId()) {
+    log("ERROR: No TikTok account configured for quotes pipeline");
     updateVideoStatus(jobId, "failed");
     return { success: false, error: "no_tiktok_account" };
   }
 
-  const videoKey = await uploadVideo(videoPath);
-  log(`Uploaded: ${videoKey}`);
+  const mediaRef = await quotePoster.upload(videoPath);
+  log(`Uploaded: ${mediaRef.slice(0, 60)}`);
 
   const hashtags = pickHashtags();
 
@@ -816,39 +840,46 @@ export async function runPipeline(opts = {}) {
   const caption = `${scriptResult.caption}${authorCredits}\n\n${hashtags.join(" ")}`;
   const scheduledAt = new Date(Date.now() + 60_000).toISOString();
 
-  const postResult = await schedulePost({
-    socialMediaId: accounts[0].id,
-    videoKey,
+  const postResult = await quotePoster.scheduleTikTok({
+    mediaRef,
     caption,
     scheduledAt,
   });
 
-  log(`Scheduled: post ${postResult.postIds[0]} at ${scheduledAt}`);
+  const postId = postResult.postId || postResult.postIds?.[0];
+  log(`Scheduled: post ${postId} at ${scheduledAt}`);
 
   // --- Step 7: Cleanup & tracking ---
   markQuotesUsed(quotes.map((q) => q.id));
   updateVideoStatus(jobId, "posted", {
-    tiktok_post_id: postResult.postIds[0],
+    tiktok_post_id: postId,
     caption,
     hashtags: JSON.stringify(hashtags),
     posted_at: new Date().toISOString(),
   });
 
-  // Clean up Veo clips (keep final video)
+  // Clean up temp clips and hook (keep final video)
   for (const clip of veoClips) {
     try { unlinkSync(clip); } catch {}
   }
+  if (hookClipPath) {
+    try { unlinkSync(hookClipPath); } catch {}
+  }
+  // Clean up stale queue files (older than 24h) from previous crashed runs
+  cleanupQueue();
 
-  log(`=== Veo Pipeline Complete: ${jobId} ===`);
+  log(`=== Pipeline Complete: ${jobId} ===`);
   return {
     success: true,
     jobId,
-    postId: postResult.postIds[0],
+    postId,
     videoPath,
     duration: videoResult.duration,
     category,
     hashtags,
-    veoCost: `~$${((VEO_MODEL === "fast" ? 1.20 : 3.20) + quotes.length * 0.03).toFixed(2)}`,
+    estimatedCost: hookClipPath
+      ? `~$${(quotes.length * 0.03 + (VEO_MODEL === "fast" ? 0 : VEO_MODEL === "standard" ? 1.20 : 3.20)).toFixed(2)} (hook + ${quotes.length} Imagen slides)`
+      : `~$${(quotes.length * 0.03).toFixed(2)} (${quotes.length} Imagen slides only)`,
   };
 }
 

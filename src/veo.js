@@ -1,19 +1,22 @@
 /**
- * Veo 3.1 video generation module.
+ * Veo video generation module — cost-priority strategy.
  *
  * Generates 8-second cinematic video clips from text prompts using Google's
- * Veo 3.1 model via the Gemini API.
+ * Veo models via the Gemini API. Only used for the HOOK clip (8s opening).
+ * Scene slides use Imagen + Ken Burns instead (much cheaper).
  *
  * Pipeline integration:
- *   1. Quote script → Veo prompt (scene description for each quote)
- *   2. Veo generates 8s clip per quote (9:16, 1080p)
- *   3. FFmpeg concatenates clips + overlays text + voiceover
+ *   1. Claude generates hookVeoPrompt (cinematic opening scene)
+ *   2. Veo generates 1x 8s hook clip (9:16)
+ *   3. FFmpeg composes: hook + Imagen slides + text overlay + voiceover
  *
- * Models:
- *   - veo-3.1-fast-generate-preview: $0.15/s ($1.20/8s video) — default
- *   - veo-3.1-generate-preview: $0.40/s ($3.20/8s video) — premium
+ * Models (cheapest-first priority):
+ *   - veo-2.0-generate-001: Free tier / cheapest — default ("fast")
+ *   - veo-3.0-fast-generate-001: Mid-tier, better quality ("standard")
+ *   - veo-3.1-generate-preview: Best quality + native audio ("premium")
  *
- * Rate limits: min latency ~11s, max ~6min during peak. Videos retained 2 days.
+ * Cost per 8s video: Veo 2.0 ~free, Veo 3.0-fast ~$1.20, Veo 3.1 ~$3.20
+ * Rate limits: 2 uses/model/day. Videos retained 2 days.
  */
 import { GoogleGenAI } from "@google/genai";
 import { writeFileSync, existsSync, mkdirSync } from "fs";
@@ -24,12 +27,12 @@ const MAX_POLL_ATTEMPTS = 60;    // 10 minutes max wait
 const MAX_USES_PER_MODEL_PER_DAY = 2;
 
 const MODELS = {
-  fast: "veo-2.0-generate-001",         // Free tier friendly, good quality
-  standard: "veo-3.0-fast-generate-001", // Paid tier, better quality
-  premium: "veo-3.1-generate-preview",   // Paid tier, best quality + native audio
+  fast: "veo-2.0-generate-001",          // Free tier / cheapest — default
+  standard: "veo-3.0-fast-generate-001", // Mid-tier (~$0.15/s)
+  premium: "veo-3.1-generate-preview",   // Best quality + native audio (~$0.40/s)
 };
 
-// Priority order: cheapest first
+// Priority order: cheapest first — always prefer lower cost
 const MODEL_PRIORITY = ["fast", "standard", "premium"];
 
 // Track daily usage per model: { "2026-03-29": { fast: 1, standard: 0, premium: 0 } }

@@ -98,6 +98,17 @@ function initSchema(db) {
   } catch {
     // Column already exists — ignore
   }
+  // Add text_vi_display for proper Vietnamese translations (only if quotes_v2 exists)
+  try {
+    const hasV2 = db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='quotes_v2'`
+    ).get();
+    if (hasV2) {
+      db.exec(`ALTER TABLE quotes_v2 ADD COLUMN text_vi_display TEXT`);
+    }
+  } catch {
+    // Column already exists or table doesn't exist — ignore
+  }
 }
 
 // --- Quote helpers (reads from quotes_v2, fallback to quotes) ---
@@ -108,7 +119,8 @@ export function getUnusedQuotes(category, limit = 5) {
   // Try quotes_v2 first (verified, attributed quotes)
   const v2Quotes = db
     .prepare(
-      `SELECT id, text_vi AS text, COALESCE(author_vi, author) AS author,
+      `SELECT id, COALESCE(text_vi_display, text_vi) AS text, text_vi AS text_raw,
+              COALESCE(author_vi, author) AS author,
               category, source_work, source_detail, text_original, origin, tone,
               times_used AS used_count
        FROM quotes_v2
@@ -128,7 +140,8 @@ export function getUnusedQuotes(category, limit = 5) {
     const v2Ids = v2Quotes.map((q) => q.id);
     const extra = db
       .prepare(
-        `SELECT id, text_vi AS text, COALESCE(author_vi, author) AS author,
+        `SELECT id, COALESCE(text_vi_display, text_vi) AS text, text_vi AS text_raw,
+                COALESCE(author_vi, author) AS author,
                 category, source_work, source_detail, text_original, origin, tone,
                 times_used AS used_count
          FROM quotes_v2
