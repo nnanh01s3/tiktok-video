@@ -381,7 +381,13 @@ for (let i = 0; i < toProcess.length; i++) {
     const isSpecialPage = ALSO_POST_TIKTOK.some(
       p => videoSourceUrl.includes(p.split("?")[0]) || videoSourceUrl === p
     );
-    await uploadAndPost(videoPath, caption, BASE_DELAY + 1 + i * 5, false);
+    // Schedule formula: BASE_DELAY + i * POST_INTERVAL.
+    // POST_INTERVAL reduced 5→2 min to match reup.mjs compressed spacing;
+    // legacy `+ 1` buffer removed (no longer needed with PostForMe's fast
+    // upload path). Videos from this script land at BASE_DELAY and
+    // BASE_DELAY + 2 minutes.
+    const REPOST_POST_INTERVAL = 2;
+    await uploadAndPost(videoPath, caption, BASE_DELAY + i * REPOST_POST_INTERVAL, false);
 
     state.processed_ids.push(video.id);
     saveProcessed(state);

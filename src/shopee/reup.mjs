@@ -50,7 +50,10 @@ const PAGE = PAGES[pageArg];
 const BASE_DELAY = args.includes("--delay")
   ? parseInt(args[args.indexOf("--delay") + 1]) || 0
   : 0; // phút delay trước khi schedule video đầu tiên
-const POST_INTERVAL = 5; // phút giữa các video cùng page
+// Spacing between 2 videos from the same page. Reduced from 5→2 minutes
+// so the entire daily batch (18 FB videos) fits in a 15-minute window per
+// user request. Old value: 5 (spread up to 46 min). New value: 2.
+const POST_INTERVAL = 2;
 const OUTPUT_DIR = join(BASE_DIR, pageArg);
 const STATE_FILE = join(OUTPUT_DIR, "state.json");
 const LOG_FILE = join(OUTPUT_DIR, "reup.log");

@@ -127,33 +127,46 @@ async function withKeyRotation(model, fn) {
 // ── Step 1: Build Imagen prompt for a scene ─────────────────────────────
 
 /**
- * Dedupe repeated character mentions in action text.
+ * Dedupe repeated character mentions in action text using Vietnamese pronouns.
  *
  * Problem: scene breakdowns often repeat the character name across beats
  *   e.g. "Momo nhìn quanh. Momo đào đất. Momo đặt chuối. Momo phủ đất."
  * Imagen tokenizes each "Momo" as a separate subject → generates 2-4 Momos
  * in the same image (visual duplicate bug).
  *
- * Fix: keep the FIRST mention, replace subsequent mentions with a pronoun
- * token. Imagen then understands one character doing multiple actions.
+ * Fix: keep the FIRST mention, replace subsequent mentions with a Vietnamese
+ * pronoun appropriate for the character's gender. Imagen then understands
+ * these as referring to the same subject without introducing a new one, AND
+ * the prompt stays grammatically correct Vietnamese (important because Veo
+ * reads the prompt for both visual and audio generation — English words like
+ * "they" mid-sentence produce broken grammar that can cause Veo audio to
+ * speak English or fail to generate videos entirely).
  *
- * Case-insensitive match on the capitalized character name (Vietnamese
- * breakdowns always capitalize proper nouns).
+ * Character pronoun mapping (keep in sync with voices.mjs character roles):
+ *   - Momo/Tiko/Bobo (male animals): "cậu"  (informal masculine)
+ *   - Lala (female fox): "cô"                (informal feminine)
+ *   - narrator: skipped (not a visual subject)
  */
+const CHARACTER_PRONOUNS = {
+  momo: "cậu",
+  tiko: "cậu",
+  bobo: "cậu",
+  lala: "cô",
+};
+
 function dedupeActionText(action, characters) {
   if (!action || !characters || characters.length === 0) return action;
   let result = action;
   for (const charKey of characters) {
+    if (charKey === "narrator") continue;
+    const pronoun = CHARACTER_PRONOUNS[charKey] || "cậu"; // fallback masculine
     // Character keys are lowercase; breakdown uses Capitalized form
     const capitalized = charKey.charAt(0).toUpperCase() + charKey.slice(1);
     const regex = new RegExp(`\\b${capitalized}\\b`, "g");
     let count = 0;
     result = result.replace(regex, (match) => {
       count++;
-      // Keep first mention as-is; replace subsequent mentions with "they"
-      // (Imagen understands this as referring to the same subject, not
-      // introducing a new one)
-      return count === 1 ? match : "they";
+      return count === 1 ? match : pronoun;
     });
   }
   return result;
