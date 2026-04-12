@@ -30,6 +30,38 @@ const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 // Inputs shorter than this threshold get padded with "Ờ, " prefix
 const TTS_MIN_CHARS = 8;
 
+// ── Prompt rules (loaded from vung/inputs/prompt_rules.md) ──────────
+// Cho phép chỉnh prompt mà không sửa code — edit prompt_rules.md rồi re-run.
+const PROMPT_RULES_PATH = "D:/tiktok/vung/inputs/prompt_rules.md";
+
+function loadPromptRules() {
+  if (!existsSync(PROMPT_RULES_PATH)) {
+    console.warn("[Render] ⚠ prompt_rules.md not found, using hardcoded fallbacks");
+    return {};
+  }
+  const content = readFileSync(PROMPT_RULES_PATH, "utf8");
+  const rules = {};
+  const sectionRegex = /^## (\w+)\s*\n\n([\s\S]*?)(?=\n## |\n---|\s*$)/gm;
+  let match;
+  while ((match = sectionRegex.exec(content))) {
+    const key = match[1].trim();
+    const value = match[2].trim();
+    rules[key] = value;
+  }
+  // Parse SPECIES_MAP into object
+  if (rules.SPECIES_MAP) {
+    const map = {};
+    for (const line of rules.SPECIES_MAP.split("\n")) {
+      const m = line.match(/^(\w+)\s*=\s*(.+)$/);
+      if (m) map[m[1].trim()] = m[2].trim();
+    }
+    rules._speciesMap = map;
+  }
+  return rules;
+}
+
+const PROMPT_RULES = loadPromptRules();
+
 // ── Reference image generation (Approach A) ──────────────────────────
 const IMAGE_MODEL_WITH_REFS = "gemini-2.5-flash-image";
 const IMAGE_MODEL_LEGACY = IMAGEN_MODEL;
@@ -171,7 +203,7 @@ async function withKeyRotation(model, fn) {
  *   - lala: "cô cáo"    (female fox)
  *   - narrator: skipped (not a visual subject)
  */
-const VIETNAMESE_SPECIES = {
+const VIETNAMESE_SPECIES = PROMPT_RULES._speciesMap || {
   momo: "chú khỉ",
   tiko: "chú rùa",
   bobo: "chú gấu",
@@ -257,38 +289,46 @@ function buildScenePromptWithReference(scene, refChars) {
   );
   const action = condenseActionText(rawAction);
 
-  const header =
+  const R = PROMPT_RULES; // shorthand
+  const header = R.IMAGE_HEADER ||
     "Generate a single cinematic still frame for a cute 3D Pixar cartoon animated short. " +
     "Anthropomorphic animal characters only, no humans in the scene. " +
     "No clothing on any character, natural animal bodies with fur/shell only. " +
     "9:16 vertical aspect ratio, vibrant magical forest environment, soft cinematic lighting.";
 
   // Reference image 1 is always the lineup (size ratio reference)
-  // Subsequent reference images are individual character sheets
   const refLabels = [];
-  refLabels.push("Reference image 1 is a CHARACTER SIZE LINEUP showing correct height ratios — Bobo (bear) is tallest, Lala (fox) is medium, Momo (monkey) is small, Tiko (turtle) is shortest. Keep these size proportions.");
+  refLabels.push(R.LINEUP_CALLOUT ||
+    "Reference image 1 is a CHARACTER SIZE LINEUP showing correct height ratios — Bobo (bear) is tallest, Lala (fox) is medium, Momo (monkey) is small, Tiko (turtle) is shortest. Keep these size proportions.");
 
   // IMPORTANT: list ALL characters that should appear, not just those with refs
   const allCharsInScene = scene.characters.filter((c) => c !== "narrator");
   if (allCharsInScene.length > 0) {
-    refLabels.push(
-      `This scene MUST show exactly these characters: ${allCharsInScene.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ")}. Do not omit any character.`
+    const charNames = allCharsInScene.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
+    const mustShowTemplate = R.CHARACTER_MUST_SHOW ||
+      "This scene MUST show exactly these characters: {characters}. Do not omit any character.";
+    refLabels.push(mustShowTemplate.replace("{characters}", charNames)
     );
   }
 
+  const refTemplate = R.CHARACTER_REF_CALLOUT ||
+    "Reference image {index} is {name} — keep appearance IDENTICAL.";
   refChars.forEach((c, i) => {
-    refLabels.push(`Reference image ${i + 2} is ${c.charAt(0).toUpperCase() + c.slice(1)} — keep appearance IDENTICAL.`);
+    refLabels.push(
+      refTemplate.replace("{index}", i + 2).replace("{name}", c.charAt(0).toUpperCase() + c.slice(1))
+    );
   });
 
   const referenceCallout = refLabels.join(" ");
 
+  const uniqueTemplate = R.CHARACTER_UNIQUENESS || "ONLY ONE {name}";
   const uniquenessConstraint = allCharsInScene.length > 0
     ? allCharsInScene
-        .map((c) => `ONLY ONE ${c.charAt(0).toUpperCase() + c.slice(1)}`)
+        .map((c) => uniqueTemplate.replace("{name}", c.charAt(0).toUpperCase() + c.slice(1)))
         .join(", ") + " in the scene"
     : "";
 
-  const negative =
+  const negative = R.IMAGE_NEGATIVE ||
     "Avoid: humans, people, human hands, human faces, photorealism, real animals, " +
     "dogs, cats, horses, duplicate characters, multiple instances of the same character, " +
     "watermarks, logos, ANY TEXT in the image, ANY LETTERS, ANY WORDS, " +
@@ -296,12 +336,15 @@ function buildScenePromptWithReference(scene, refChars) {
     "labels, speech bubbles, thought bubbles, floating text, " +
     "Pixar watermark, TikTok caption, stock footage artifacts, clothing, shirts, pants, robes";
 
+  const noTextDirective = R.NO_TEXT_DIRECTIVE ||
+    "NO TEXT, NO LETTERS, NO WRITING, NO CAPTIONS, NO WATERMARKS in the image";
+
   return [
     header,
     referenceCallout,
     `Scene action: ${action}`,
     uniquenessConstraint,
-    "NO TEXT, NO LETTERS, NO WRITING, NO CAPTIONS, NO WATERMARKS in the image",
+    noTextDirective,
     negative,
   ].filter(Boolean).join(" ");
 }
@@ -520,8 +563,8 @@ function buildVeoMotionPrompt(scene) {
     primaryAction || scene.goal || scene.title,
     endingHint,
     dialogueHint,
-    "Phong cách pixar 3D cartoon, chuyển động mượt, màu sắc tươi.",
-    "QUAN TRỌNG: KHÔNG có lời dẫn chuyện, KHÔNG có voice-over tiếng Anh. " +
+    PROMPT_RULES.VEO_STYLE || "Phong cách pixar 3D cartoon, chuyển động mượt, màu sắc tươi.",
+    PROMPT_RULES.VEO_NO_NARRATION || "QUAN TRỌNG: KHÔNG có lời dẫn chuyện, KHÔNG có voice-over tiếng Anh. " +
       "Chỉ có nhân vật nói tiếng Việt và âm thanh môi trường rừng.",
   ].join(" ").replace(/\s+/g, " ").trim();
 }
