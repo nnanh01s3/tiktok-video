@@ -214,11 +214,44 @@ function loadCharacterReference(charKey) {
   return base64;
 }
 
+/**
+ * Condense action text for Imagen prompt.
+ *
+ * v2 breakdowns are 1500+ chars of detailed Vietnamese prose — too long for
+ * Imagen when combined with 5 reference images. Causes two bugs:
+ *   1. Model drops characters (overloaded by long text + many images)
+ *   2. Vietnamese nouns get rendered as text labels ("kim cương", "vương miện")
+ *
+ * Fix: strip quoted strings, strip camera/editing directions, keep only
+ * character actions + key visual elements, truncate to ~800 chars.
+ */
+function condenseActionText(rawAction) {
+  if (!rawAction) return rawAction;
+  let text = rawAction;
+  // Strip quoted dialogue/text embedded in breakdown (causes Imagen to render text)
+  text = text.replace(/[""\u201C\u201D][^""\u201C\u201D]{2,}[""\u201C\u201D]/g, "");
+  // Strip camera/editing directions (not visual content — confuses image generation)
+  text = text.replace(/Camera [^.]+\./gi, "");
+  text = text.replace(/\b(close-?up|medium shot|wide shot|tracking|push-?in|tilt|pan|whip|zoom|handheld)\b[^.]*\.?/gi, "");
+  // Strip "lớp hình tưởng tượng" descriptions (causes floating text/objects)
+  text = text.replace(/[Ll]ớp hình[^.]+\./g, "");
+  text = text.replace(/tưởng tượng[^.]+\./g, "");
+  // Collapse whitespace
+  text = text.replace(/\s+/g, " ").trim();
+  // Truncate to ~800 chars at sentence boundary
+  if (text.length > 800) {
+    const cut = text.lastIndexOf(".", 800);
+    text = cut > 200 ? text.slice(0, cut + 1) : text.slice(0, 800);
+  }
+  return text;
+}
+
 function buildScenePromptWithReference(scene, refChars) {
-  const action = dedupeActionText(
+  const rawAction = dedupeActionText(
     scene.visualDescription || scene.goal || "",
     scene.characters
   );
+  const action = condenseActionText(rawAction);
 
   const header =
     "Generate a single cinematic still frame for a cute 3D Pixar cartoon animated short. " +
@@ -229,15 +262,24 @@ function buildScenePromptWithReference(scene, refChars) {
   // Reference image 1 is always the lineup (size ratio reference)
   // Subsequent reference images are individual character sheets
   const refLabels = [];
-  refLabels.push("Reference image 1 is a CHARACTER SIZE LINEUP showing correct height ratios — Bobo (bear) is tallest, Lala (fox) is medium, Momo (monkey) is small, Tiko (turtle) is shortest. Keep these size proportions in the scene.");
+  refLabels.push("Reference image 1 is a CHARACTER SIZE LINEUP showing correct height ratios — Bobo (bear) is tallest, Lala (fox) is medium, Momo (monkey) is small, Tiko (turtle) is shortest. Keep these size proportions.");
+
+  // IMPORTANT: list ALL characters that should appear, not just those with refs
+  const allCharsInScene = scene.characters.filter((c) => c !== "narrator");
+  if (allCharsInScene.length > 0) {
+    refLabels.push(
+      `This scene MUST show exactly these characters: ${allCharsInScene.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ")}. Do not omit any character.`
+    );
+  }
+
   refChars.forEach((c, i) => {
-    refLabels.push(`Reference image ${i + 2} is ${c.charAt(0).toUpperCase() + c.slice(1)} — keep appearance IDENTICAL to this reference.`);
+    refLabels.push(`Reference image ${i + 2} is ${c.charAt(0).toUpperCase() + c.slice(1)} — keep appearance IDENTICAL.`);
   });
 
   const referenceCallout = refLabels.join(" ");
 
-  const uniquenessConstraint = scene.characters.length > 0
-    ? scene.characters
+  const uniquenessConstraint = allCharsInScene.length > 0
+    ? allCharsInScene
         .map((c) => `ONLY ONE ${c.charAt(0).toUpperCase() + c.slice(1)}`)
         .join(", ") + " in the scene"
     : "";
@@ -245,8 +287,10 @@ function buildScenePromptWithReference(scene, refChars) {
   const negative =
     "Avoid: humans, people, human hands, human faces, photorealism, real animals, " +
     "dogs, cats, horses, duplicate characters, multiple instances of the same character, " +
-    "watermarks, logos, text, captions, subtitles, Pixar watermark, TikTok caption, " +
-    "Vietnamese text overlay, stock footage artifacts, clothing, shirts, pants, robes";
+    "watermarks, logos, ANY TEXT in the image, ANY LETTERS, ANY WORDS, " +
+    "Vietnamese text, Korean text, Chinese text, English text, captions, subtitles, " +
+    "labels, speech bubbles, thought bubbles, floating text, " +
+    "Pixar watermark, TikTok caption, stock footage artifacts, clothing, shirts, pants, robes";
 
   return [
     header,
