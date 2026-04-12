@@ -24,12 +24,11 @@ import { join } from "path";
 import { BASE_DIR } from "./config.mjs";
 
 // ── Source Pages ──────────────────────────────────────────────────────────
+// Only "Đồ Độc Lạ" page per user request (previously had 5 sources with
+// 4-hour rotation). Fallback loop in main still iterates the array, but
+// with 1 entry it simply scrapes this one page.
 const SOURCE_PAGES = [
-  "https://www.facebook.com/dathangtrungquoc01",
-  "https://www.facebook.com/profile.php?id=61552371315310",
-  "https://www.facebook.com/profile.php?id=61576726414275",
-  "https://www.facebook.com/suutamdohay",
-  "https://www.facebook.com/dosinhton01",
+  "https://www.facebook.com/profile.php?id=61576726414275", // Đồ Độc Lạ
 ];
 
 // Page đích

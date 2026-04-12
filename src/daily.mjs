@@ -32,31 +32,30 @@ const SKIP_CACHE = args.includes("--skip-cache");
 const CACHE_FILE = join(ROOT, "data/shopee/products_cache.json");
 const CACHE_MAX_AGE = 4 * 60 * 60 * 1000; // 4 hours
 
-// Delays compressed from spread-40-min to max-15-min window per user request.
-// Each script posts 2 videos at `delay` and `delay + POST_INTERVAL` minutes.
-// With POST_INTERVAL=2 in reup.mjs + fb_repost.mjs, final scheduled times:
-//   shopee     :  0,  2
-//   gia_dung   :  2,  4
-//   tech       :  4,  6
-//   sac_dep    :  6,  8
-//   thoi_trang :  8, 10
-//   me_be      : 10, 12
-//   the_thao   : 11, 13  (tighter 1-min gap from here — 18 videos / 15 min slot)
-//   bach_hoa   : 12, 14
-//   fb_repost  : 13, 15
-// Total: 18 Facebook videos spread across a 0–15 minute window.
+// Each script posts 1 video per run (MAX_PER_RUN=1 in config.mjs).
+// Delays compressed within 15-min window. Scheduled times:
+//   shopee     :  0
+//   gia_dung   :  2
+//   tech       :  3
+//   sac_dep    :  4
+//   thoi_trang :  5
+//   me_be      :  7
+//   the_thao   :  8
+//   bach_hoa   : 10
+//   fb_repost  : 12
+// Total: 9 FB videos + 1 TikTok spread across 0–12 minute window.
 const FB_SCRIPTS = [
-  // ── 8 FB pages (all PostForMe) ──
+  // ── 8 FB pages (all PostForMe, 1 video each) ──
   { name: "shopee",     cmd: ["src/shopee/reup.mjs", "--page", "shopee", "--delay", "0"] },
   { name: "gia_dung",   cmd: ["src/shopee/reup.mjs", "--page", "gia_dung", "--delay", "2"] },
-  { name: "tech",       cmd: ["src/shopee/reup.mjs", "--page", "tech", "--delay", "4"] },
-  { name: "sac_dep",    cmd: ["src/shopee/reup.mjs", "--page", "sac_dep", "--delay", "6"] },
-  { name: "thoi_trang", cmd: ["src/shopee/reup.mjs", "--page", "thoi_trang", "--delay", "8"] },
-  { name: "me_be",      cmd: ["src/shopee/reup.mjs", "--page", "me_be", "--delay", "10"] },
-  { name: "the_thao",   cmd: ["src/shopee/reup.mjs", "--page", "the_thao", "--delay", "11"] },
-  { name: "bach_hoa",   cmd: ["src/shopee/reup.mjs", "--page", "bach_hoa", "--delay", "12"] },
-  // ── FB repost ──
-  { name: "fb_repost",  cmd: ["src/shopee/fb_repost.mjs", "--max", "2", "--delay", "13"] },
+  { name: "tech",       cmd: ["src/shopee/reup.mjs", "--page", "tech", "--delay", "3"] },
+  { name: "sac_dep",    cmd: ["src/shopee/reup.mjs", "--page", "sac_dep", "--delay", "4"] },
+  { name: "thoi_trang", cmd: ["src/shopee/reup.mjs", "--page", "thoi_trang", "--delay", "5"] },
+  { name: "me_be",      cmd: ["src/shopee/reup.mjs", "--page", "me_be", "--delay", "7"] },
+  { name: "the_thao",   cmd: ["src/shopee/reup.mjs", "--page", "the_thao", "--delay", "8"] },
+  { name: "bach_hoa",   cmd: ["src/shopee/reup.mjs", "--page", "bach_hoa", "--delay", "10"] },
+  // ── FB repost (1 video from Đồ Độc Lạ only) ──
+  { name: "fb_repost",  cmd: ["src/shopee/fb_repost.mjs", "--max", "1", "--delay", "12"] },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────

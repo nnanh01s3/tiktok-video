@@ -131,4 +131,4 @@ export const FFPROBE = process.env.FFPROBE_PATH || "ffprobe";
 export const FONT = process.env.FONT_PATH || "C:/Windows/Fonts/arial.ttf";
 export const BASE_DIR = "D:/tiktok/data/shopee";
 export const MAX_PER_DAY = 12;
-export const MAX_PER_RUN = 2;
+export const MAX_PER_RUN = 1; // 1 video per page per daily run (was 2)
