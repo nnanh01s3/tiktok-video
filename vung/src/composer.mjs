@@ -33,11 +33,6 @@ const FFPROBE = process.env.FFPROBE_PATH || "ffprobe";
 // pacing isn't disturbed. Too long = viewer feels the scene "drifts".
 const DEFAULT_XFADE = 0.4;
 
-// Head/tail silence around dialogue lines within a scene
-// (only used when includeDialogue=true)
-const DIALOGUE_HEAD = 0.5;
-const DIALOGUE_TAIL = 0.5;
-
 // Scene ambient audio (from Veo) volume in final mix.
 // Previously was 0.4 to make room for dialogue TTS. Now that dialogue is
 // disabled by default, keep at 1.0 for full-strength native Veo audio.
@@ -59,45 +54,6 @@ function probeDuration(filePath) {
   } catch {
     return 0;
   }
-}
-
-/**
- * Build a dialogue timing plan accounting for xfade overlap between scenes.
- *
- * @param {Array<{scene, clipPath, clipDur, dialogue}>} rendered - caller must populate clipDur
- * @param {number} xfadeDur
- * @returns {{timed: Array<{path, startSec}>, totalDuration: number}}
- */
-function planDialogueTimingWithXfade(rendered, xfadeDur) {
-  const timed = [];
-  let sceneVisibleStart = 0; // when scene i starts being shown in output timeline
-
-  for (let i = 0; i < rendered.length; i++) {
-    const { scene, clipDur, dialogue } = rendered[i];
-
-    if (dialogue.length > 0) {
-      // Leave head + tail; distribute lines evenly in the middle
-      const usable = Math.max(0.1, clipDur - DIALOGUE_HEAD - DIALOGUE_TAIL);
-      const slot = usable / dialogue.length;
-
-      for (let j = 0; j < dialogue.length; j++) {
-        timed.push({
-          path: dialogue[j].path,
-          startSec: sceneVisibleStart + DIALOGUE_HEAD + j * slot,
-        });
-      }
-    }
-
-    // Advance to next scene's visible start (accounting for xfade overlap)
-    // Last scene: add only clipDur (no overlap after last scene)
-    if (i < rendered.length - 1) {
-      sceneVisibleStart += clipDur - xfadeDur;
-    } else {
-      sceneVisibleStart += clipDur;
-    }
-  }
-
-  return { timed, totalDuration: sceneVisibleStart };
 }
 
 /**
@@ -169,8 +125,6 @@ function buildSceneAudioChain(rendered, xfadeDur) {
  *
  * Audio strategy (post "quá nhỏ" fix):
  *   - Native Veo scene audio is the PRIMARY audio track (full volume 1.0)
- *   - Dialogue TTS mixing is DISABLED by default (was causing amix gain
- *     reduction: with 21 inputs, each one got 1/21 ≈ 4.8% final volume)
  *   - Background music is optional, mixed at musicVolume
  *   - All amix calls use normalize=0 to prevent auto gain reduction
  *
@@ -180,15 +134,12 @@ function buildSceneAudioChain(rendered, xfadeDur) {
  * @param {string} [options.bgMusic] - optional background music file path
  * @param {number} [options.musicVolume=0.15] - bgm volume (0-1)
  * @param {number} [options.xfadeDur=0.4] - crossfade duration between scenes
- * @param {boolean} [options.includeDialogue=false] - mix dialogue TTS over scene audio
- *   (default false — rely on native Veo audio; set true to bring back TTS voice mixing)
  */
 export async function composeVideo(rendered, outputPath, options = {}) {
   const {
     bgMusic,
     musicVolume = 0.15,
     xfadeDur = DEFAULT_XFADE,
-    includeDialogue = false,
   } = options;
 
   // Validate inputs
@@ -205,27 +156,23 @@ export async function composeVideo(rendered, outputPath, options = {}) {
 
   const nScenes = rendered.length;
 
-  // Compute total duration + dialogue timing (only used if includeDialogue=true)
-  const { timed: dialogueTiming, totalDuration } = planDialogueTimingWithXfade(
-    rendered,
-    xfadeDur
-  );
-  const dialogueCount = includeDialogue ? dialogueTiming.length : 0;
+  // Compute total duration (sum of clips minus xfade overlaps)
+  let totalDuration = 0;
+  for (let i = 0; i < rendered.length; i++) {
+    totalDuration += rendered[i].clipDur;
+    if (i < rendered.length - 1) totalDuration -= xfadeDur;
+  }
+  const dialogueCount = 0;
   console.log(
     `[Compose] ${nScenes} scenes, ${totalDuration.toFixed(1)}s total ` +
-      `(${xfadeDur}s xfade), ${dialogueCount} dialogue lines ` +
-      `(includeDialogue=${includeDialogue})`
+      `(${xfadeDur}s xfade), ${dialogueCount} dialogue lines`
   );
 
   // Build ffmpeg inputs list:
   //   Inputs 0..N-1: scene clips
-  //   Inputs N..N+K-1: dialogue audio files (only if includeDialogue)
   //   Last input (optional): background music
   const inputs = [];
   rendered.forEach((r) => inputs.push(`-i "${r.clipPath}"`));
-  if (includeDialogue) {
-    dialogueTiming.forEach((d) => inputs.push(`-i "${d.path}"`));
-  }
 
   let bgmIdx = -1;
   if (bgMusic && existsSync(bgMusic)) {
@@ -251,20 +198,7 @@ export async function composeVideo(rendered, outputPath, options = {}) {
 
   const mixInputs = [`[sceneaudio]`];
 
-  // 4) Dialogue delays (optional — only when includeDialogue=true)
-  if (includeDialogue) {
-    dialogueTiming.forEach((d, i) => {
-      const idx = nScenes + i;
-      const delayMs = Math.round(d.startSec * 1000);
-      const label = `d${i}`;
-      filterParts.push(
-        `[${idx}:a]adelay=${delayMs}|${delayMs},volume=1.3[${label}]`
-      );
-      mixInputs.push(`[${label}]`);
-    });
-  }
-
-  // 5) Background music (optional, trimmed to total duration)
+  // 4) Background music (optional, trimmed to total duration)
   if (bgmIdx >= 0) {
     filterParts.push(
       `[${bgmIdx}:a]volume=${musicVolume},` +
@@ -275,7 +209,7 @@ export async function composeVideo(rendered, outputPath, options = {}) {
     mixInputs.push(`[bgm]`);
   }
 
-  // 6) Final audio mix
+  // 5) Final audio mix
   // CRITICAL: normalize=0 prevents FFmpeg's default gain reduction (1/N per
   // input). Without this, scene audio at volume=1.0 with 21 mix inputs would
   // become 1/21 ≈ 4.8% of original — the bug that caused "quá nhỏ" audio.

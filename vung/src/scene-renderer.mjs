@@ -26,6 +26,22 @@ const VEO_MODEL = "veo-3.1-lite-generate-preview";
 const IMAGEN_MODEL = "imagen-4.0-fast-generate-001";
 const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 
+// ── Reference image generation (Approach A) ──────────────────────────
+const IMAGE_MODEL_WITH_REFS = "gemini-2.5-flash-image";
+const IMAGE_MODEL_LEGACY = IMAGEN_MODEL;
+const USE_REFERENCE_IMAGES = process.env.VUNG_USE_REFS !== "0";
+
+const REFERENCE_DIR = "D:/tiktok/vung/nhan_vat/canonical";
+const REFERENCE_MAP = {
+  momo: "momo.png",
+  tiko: "tiko.png",
+  lala: "lala.png",
+  bobo: "bobo.png",
+};
+const LINEUP_REFERENCE = "lineup.png";  // size ratio reference, injected into EVERY scene
+
+const _referenceCache = new Map();
+
 const POLL_INTERVAL_MS = 10_000;
 const MAX_POLL_ATTEMPTS = 60; // 10 min max per Veo gen
 
@@ -127,31 +143,35 @@ async function withKeyRotation(model, fn) {
 // ── Step 1: Build Imagen prompt for a scene ─────────────────────────────
 
 /**
- * Dedupe repeated character mentions in action text using Vietnamese pronouns.
+ * Vietnamese species anchor for each character.
  *
- * Problem: scene breakdowns often repeat the character name across beats
- *   e.g. "Momo nhìn quanh. Momo đào đất. Momo đặt chuối. Momo phủ đất."
- * Imagen tokenizes each "Momo" as a separate subject → generates 2-4 Momos
- * in the same image (visual duplicate bug).
+ * Problem: scene breakdowns in tiếng Việt often say just "Momo" without any
+ * species word. Imagen reads a long Vietnamese action paragraph mentioning
+ * "bàn tay", "mặt", "miệng", "lông mày" — all human anatomy words — and
+ * defaults to rendering humans (or dogs) because Vietnamese prose training
+ * data rarely maps bare names to specific animal species.
  *
- * Fix: keep the FIRST mention, replace subsequent mentions with a Vietnamese
- * pronoun appropriate for the character's gender. Imagen then understands
- * these as referring to the same subject without introducing a new one, AND
- * the prompt stays grammatically correct Vietnamese (important because Veo
- * reads the prompt for both visual and audio generation — English words like
- * "they" mid-sentence produce broken grammar that can cause Veo audio to
- * speak English or fail to generate videos entirely).
+ * Fix: every mention of the character name in action text is prefixed with
+ * the Vietnamese species word ("chú khỉ", "cô cáo"...). The FIRST mention
+ * keeps the character name too ("chú khỉ Momo"); subsequent mentions drop
+ * the name but keep the species ("chú khỉ"). This simultaneously:
+ *   1. Anchors species on EVERY mention (no more "cậu" ambiguity)
+ *   2. Avoids the "2 Momos" duplicate bug (only 1 "Momo" in the prompt)
+ *   3. Stays grammatical Vietnamese (important for Veo which reads prompt
+ *      for both video AND audio — English pronouns produce broken speech)
  *
- * Character pronoun mapping (keep in sync with voices.mjs character roles):
- *   - Momo/Tiko/Bobo (male animals): "cậu"  (informal masculine)
- *   - Lala (female fox): "cô"                (informal feminine)
+ * Mapping (keep in sync with voices.mjs visualPrompt species):
+ *   - momo: "chú khỉ"   (male monkey)
+ *   - tiko: "chú rùa"   (male turtle)
+ *   - bobo: "chú gấu"   (male bear)
+ *   - lala: "cô cáo"    (female fox)
  *   - narrator: skipped (not a visual subject)
  */
-const CHARACTER_PRONOUNS = {
-  momo: "cậu",
-  tiko: "cậu",
-  bobo: "cậu",
-  lala: "cô",
+const VIETNAMESE_SPECIES = {
+  momo: "chú khỉ",
+  tiko: "chú rùa",
+  bobo: "chú gấu",
+  lala: "cô cáo",
 };
 
 function dedupeActionText(action, characters) {
@@ -159,17 +179,133 @@ function dedupeActionText(action, characters) {
   let result = action;
   for (const charKey of characters) {
     if (charKey === "narrator") continue;
-    const pronoun = CHARACTER_PRONOUNS[charKey] || "cậu"; // fallback masculine
+    const species = VIETNAMESE_SPECIES[charKey];
+    if (!species) continue;
     // Character keys are lowercase; breakdown uses Capitalized form
     const capitalized = charKey.charAt(0).toUpperCase() + charKey.slice(1);
     const regex = new RegExp(`\\b${capitalized}\\b`, "g");
     let count = 0;
     result = result.replace(regex, (match) => {
       count++;
-      return count === 1 ? match : pronoun;
+      // First mention: "chú khỉ Momo" (name + species anchor)
+      // Subsequent:    "chú khỉ"      (species only, drops name so Imagen
+      //                                 doesn't see 2+ "Momo" tokens)
+      return count === 1 ? `${species} ${match}` : species;
     });
   }
   return result;
+}
+
+function loadCharacterReference(charKey) {
+  if (_referenceCache.has(charKey)) return _referenceCache.get(charKey);
+  const filename = charKey === "_lineup" ? LINEUP_REFERENCE : REFERENCE_MAP[charKey];
+  if (!filename) {
+    _referenceCache.set(charKey, null);
+    return null;
+  }
+  const path = `${REFERENCE_DIR}/${filename}`;
+  if (!existsSync(path)) {
+    console.log(`[Render] ⚠ Missing reference PNG: ${path}`);
+    _referenceCache.set(charKey, null);
+    return null;
+  }
+  const base64 = readFileSync(path).toString("base64");
+  _referenceCache.set(charKey, base64);
+  return base64;
+}
+
+function buildScenePromptWithReference(scene, refChars) {
+  const action = dedupeActionText(
+    scene.visualDescription || scene.goal || "",
+    scene.characters
+  );
+
+  const header =
+    "Generate a single cinematic still frame for a cute 3D Pixar cartoon animated short. " +
+    "Anthropomorphic animal characters only, no humans in the scene. " +
+    "No clothing on any character, natural animal bodies with fur/shell only. " +
+    "9:16 vertical aspect ratio, vibrant magical forest environment, soft cinematic lighting.";
+
+  // Reference image 1 is always the lineup (size ratio reference)
+  // Subsequent reference images are individual character sheets
+  const refLabels = [];
+  refLabels.push("Reference image 1 is a CHARACTER SIZE LINEUP showing correct height ratios — Bobo (bear) is tallest, Lala (fox) is medium, Momo (monkey) is small, Tiko (turtle) is shortest. Keep these size proportions in the scene.");
+  refChars.forEach((c, i) => {
+    refLabels.push(`Reference image ${i + 2} is ${c.charAt(0).toUpperCase() + c.slice(1)} — keep appearance IDENTICAL to this reference.`);
+  });
+
+  const referenceCallout = refLabels.join(" ");
+
+  const uniquenessConstraint = scene.characters.length > 0
+    ? scene.characters
+        .map((c) => `ONLY ONE ${c.charAt(0).toUpperCase() + c.slice(1)}`)
+        .join(", ") + " in the scene"
+    : "";
+
+  const negative =
+    "Avoid: humans, people, human hands, human faces, photorealism, real animals, " +
+    "dogs, cats, horses, duplicate characters, multiple instances of the same character, " +
+    "watermarks, logos, text, captions, subtitles, Pixar watermark, TikTok caption, " +
+    "Vietnamese text overlay, stock footage artifacts, clothing, shirts, pants, robes";
+
+  return [
+    header,
+    referenceCallout,
+    `Scene action: ${action}`,
+    uniquenessConstraint,
+    "NO TEXT, NO LETTERS, NO WRITING, NO CAPTIONS, NO WATERMARKS in the image",
+    negative,
+  ].filter(Boolean).join(" ");
+}
+
+async function generateSceneImageWithRefs(scene, outputPath) {
+  if (existsSync(outputPath) && statSync(outputPath).size > 1000) {
+    console.log(`[Render] Scene ${scene.id} image exists, skipping`);
+    return outputPath;
+  }
+  ensureDir(outputPath);
+
+  // Always include lineup as first reference (size ratios)
+  const refParts = [];
+  const refChars = [];
+  const lineupBase64 = loadCharacterReference("_lineup");
+  if (lineupBase64) {
+    refParts.push({ inlineData: { data: lineupBase64, mimeType: "image/png" } });
+  }
+
+  // Then add individual character references
+  for (const charKey of scene.characters) {
+    if (charKey === "narrator") continue;
+    const base64 = loadCharacterReference(charKey);
+    if (base64) {
+      refParts.push({ inlineData: { data: base64, mimeType: "image/png" } });
+      refChars.push(charKey);
+    }
+  }
+
+  const prompt = buildScenePromptWithReference(scene, refChars);
+  console.log(
+    `[Render] Scene ${scene.id} → Gemini Image (${refParts.length} refs: lineup + ${refChars.join(",")}): ` +
+    `"${prompt.slice(0, 100)}..."`
+  );
+
+  const buffer = await withKeyRotation("imagen", async (client) => {
+    const res = await client.models.generateContent({
+      model: IMAGE_MODEL_WITH_REFS,
+      contents: [{
+        role: "user",
+        parts: [{ text: prompt }, ...refParts],
+      }],
+      config: { responseModalities: ["IMAGE"] },
+    });
+    const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+    if (!part?.inlineData?.data) throw new Error("Image model returned no image");
+    return Buffer.from(part.inlineData.data, "base64");
+  });
+
+  writeFileSync(outputPath, buffer);
+  console.log(`[Render] Scene ${scene.id} image saved: ${(buffer.length / 1024).toFixed(0)}KB`);
+  return outputPath;
 }
 
 function buildScenePrompt(scene) {
@@ -177,15 +313,26 @@ function buildScenePrompt(scene) {
   // rendered as garbled letters in the generated image. Imagen treats
   // any text in the prompt as a hint to draw text in the image.
   //
-  // Strategy:
-  //   - Pure visual description (action from breakdown), deduped character mentions
-  //   - Character visual prompts injected
-  //   - Explicit "ONLY ONE" uniqueness constraint per character
-  //   - Master style for consistency
-  //   - Explicit "no text" + "no duplicates" negative
+  // Strategy (LEAD WITH STYLE + SPECIES, trailing negatives):
+  //   1. Header: style + "anthropomorphic animal characters only" so Imagen
+  //      commits to cartoon animal interpretation BEFORE reading action text.
+  //      This is critical — Vietnamese action text is long (1500+ chars) and
+  //      if style/species declarations come after, Imagen defaults to humans.
+  //   2. Character visual prompts (English, specific body/fur/tail details)
+  //   3. Action text with inline Vietnamese species anchor (from dedupe)
+  //   4. Uniqueness constraint ("ONLY ONE X in scene")
+  //   5. Explicit negatives against humans, realism, duplicates, text
   const rawAction = scene.visualDescription || scene.goal || "";
   const action = dedupeActionText(rawAction, scene.characters);
   const charPrompt = buildCharacterPrompt(scene.characters);
+
+  // Subject anchor that front-loads the interpretation frame. Imagen commits
+  // to this before parsing the Vietnamese action text that follows.
+  const header =
+    "Cute 3D Pixar cartoon animation short. " +
+    "Anthropomorphic animal characters only, no humans in the scene. " +
+    "Vibrant magical forest environment, soft cinematic lighting, " +
+    "9:16 vertical aspect ratio";
 
   // Explicit "only one of each" constraint — helps Imagen avoid duplicating
   // characters when the scene's action implies multiple interactions.
@@ -196,25 +343,32 @@ function buildScenePrompt(scene) {
         .join(", ") + " in the scene"
     : "";
 
-  // Reinforce uniqueness in the negative prompt
+  // Strong negatives: humans (user rule: "không liên quan đến con người"),
+  // realistic photography (v4 wants Pixar cartoon), common misinterpretations
+  // (dogs/cats when species isn't anchored), duplicate characters.
+  const humansNegative =
+    "NO humans, NO people, NO human characters, NO human hands, NO human faces, " +
+    "NO realistic photography, NO real animals, NO photorealism, " +
+    "NO dogs, NO cats, NO horses";
   const duplicateNegative =
     "multiple instances of the same character, duplicate characters, " +
     "twin characters, cloned characters, two of the same animal";
 
   const parts = [
-    action,
-    charPrompt,
-    uniquenessConstraint,
-    MASTER_STYLE_PROMPT,
+    header,                 // 1. Style + animal-only frame (FIRST)
+    charPrompt,             // 2. Specific character visual prompts
+    `Scene: ${action}`,     // 3. Vietnamese action (species-anchored via dedupe)
+    uniquenessConstraint,   // 4. "ONLY ONE X"
+    MASTER_STYLE_PROMPT,    // 5. Master style reminder
     "NO TEXT, NO LETTERS, NO WRITING, NO SIGNS, NO LOGOS in the image",
-    `Avoid: ${duplicateNegative}`,
+    `Negative: ${humansNegative}. Avoid: ${duplicateNegative}`,
   ].filter(Boolean);
 
   return parts.join(". ");
 }
 
 // ── Step 2: Generate scene image (Imagen 4.0) ────────────────────────────
-async function generateSceneImage(scene, outputPath) {
+async function generateSceneImageLegacy(scene, outputPath) {
   if (existsSync(outputPath) && statSync(outputPath).size > 1000) {
     console.log(`[Render] Scene ${scene.id} image exists, skipping`);
     return outputPath;
@@ -241,6 +395,19 @@ async function generateSceneImage(scene, outputPath) {
   writeFileSync(outputPath, buffer);
   console.log(`[Render] Scene ${scene.id} image saved: ${(buffer.length / 1024).toFixed(0)}KB`);
   return outputPath;
+}
+
+async function generateSceneImage(scene, outputPath) {
+  if (!USE_REFERENCE_IMAGES) return generateSceneImageLegacy(scene, outputPath);
+  try {
+    return await generateSceneImageWithRefs(scene, outputPath);
+  } catch (err) {
+    if (err.message?.includes("All keys exhausted")) {
+      console.log("[Render] ⚠ Reference model exhausted, falling back to Imagen legacy");
+      return generateSceneImageLegacy(scene, outputPath);
+    }
+    throw err;
+  }
 }
 
 // ── Step 3: Animate image with Veo 3.1 Lite ──────────────────────────────
@@ -408,7 +575,28 @@ async function generateDialogueAudio(scene, outputDir) {
     // `line.direction` (e.g. "thì thầm", "hét lớn") is intentionally NOT
     // included either — it would be spoken as part of the audio by Gemini.
     // Future enhancement: encode direction via SSML prosody tags if needed.
-    const fullText = line.text;
+    //
+    // PADDING FOR ULTRA-SHORT UTTERANCES:
+    // Gemini TTS reliably fails on inputs with too few phonemes (e.g.
+    // "…Ủa?", "Hả?!", "…chuối?"). The 15-key rotation burns through all
+    // keys before 15 retries succeed (if at all). Pre-padding these cases
+    // with a short Vietnamese phonetic hint word that blends naturally
+    // ("ờ" ~ spoken "uh") satisfies the phoneme minimum without changing
+    // the perceived line. Strip the leading `…` first so Gemini doesn't
+    // also trip on the ellipsis character.
+    //
+    // Threshold: strip leading ellipsis, then if text ≤ 8 visible chars,
+    // prepend "Ờ, " (Vietnamese hesitation filler) to force longer input.
+    function preparTtsText(raw) {
+      if (!raw) return raw;
+      // Strip leading unicode/ascii ellipsis + spaces
+      const stripped = raw.replace(/^[…\.\s]+/, "").trim();
+      if (stripped.length <= 8) {
+        return `Ờ, ${stripped}`;
+      }
+      return stripped;
+    }
+    const fullText = preparTtsText(line.text);
 
     console.log(`[Render] Scene ${scene.id} → TTS ${char.name}: "${line.text.slice(0, 40)}..."`);
 
@@ -582,7 +770,7 @@ function overlayTextOnClip(inputPath, outputPath, textOverlays) {
  * @param {string} outputDir - e.g., "vung/output/tap_01"
  * @returns {Promise<{imagePath, clipPath, dialogue: Array}>}
  */
-export async function renderScene(scene, outputDir) {
+export async function renderScene(scene, outputDir, opts = {}) {
   ensureDir(`${outputDir}/.keep`);
 
   // Title scenes (intro, CTA) bypass Veo entirely:
@@ -600,6 +788,11 @@ export async function renderScene(scene, outputDir) {
 
   // Step 1: Imagen (starting frame)
   await generateSceneImage(scene, imagePath);
+
+  if (opts.skipVeo) {
+    console.log(`[Render] Scene ${scene.id} --skip-veo: image only, skipping Veo + TTS`);
+    return { imagePath, clipPath: null, dialogue: [] };
+  }
 
   // Step 2: Veo animate (raw 8s clip, no text)
   await generateSceneClip(scene, imagePath, rawClipPath);
