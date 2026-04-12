@@ -16,8 +16,8 @@
  */
 import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, statSync } from "fs";
 import { dirname } from "path";
-import { execSync, spawnSync } from "child_process";
-import { getClient, markKeyExhausted, DAILY_QUOTAS } from "./gemini-keys.js";
+import { spawnSync } from "child_process";
+import { getClient, markKeyExhausted } from "./gemini-keys.js";
 import { getCharacter, buildCharacterPrompt, MASTER_STYLE_PROMPT, MASTER_NEGATIVE_PROMPT } from "./voices.mjs";
 
 // Veo 3.1 Lite — cheapest paid tier ($0.05/s @ 720p), supports image-to-video + 9:16
@@ -25,6 +25,10 @@ import { getCharacter, buildCharacterPrompt, MASTER_STYLE_PROMPT, MASTER_NEGATIV
 const VEO_MODEL = "veo-3.1-lite-generate-preview";
 const IMAGEN_MODEL = "imagen-4.0-fast-generate-001";
 const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+
+// Gemini TTS fails on inputs with too few phonemes (e.g. "…Ủa?", "Hả?!")
+// Inputs shorter than this threshold get padded with "Ờ, " prefix
+const TTS_MIN_CHARS = 8;
 
 // ── Reference image generation (Approach A) ──────────────────────────
 const IMAGE_MODEL_WITH_REFS = "gemini-2.5-flash-image";
@@ -653,16 +657,16 @@ async function generateDialogueAudio(scene, outputDir) {
     //
     // Threshold: strip leading ellipsis, then if text ≤ 8 visible chars,
     // prepend "Ờ, " (Vietnamese hesitation filler) to force longer input.
-    function preparTtsText(raw) {
+    function prepareTtsText(raw) {
       if (!raw) return raw;
       // Strip leading unicode/ascii ellipsis + spaces
       const stripped = raw.replace(/^[…\.\s]+/, "").trim();
-      if (stripped.length <= 8) {
+      if (stripped.length <= TTS_MIN_CHARS) {
         return `Ờ, ${stripped}`;
       }
       return stripped;
     }
-    const fullText = preparTtsText(line.text);
+    const fullText = prepareTtsText(line.text);
 
     console.log(`[Render] Scene ${scene.id} → TTS ${char.name}: "${line.text.slice(0, 40)}..."`);
 

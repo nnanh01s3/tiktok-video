@@ -162,10 +162,8 @@ export async function composeVideo(rendered, outputPath, options = {}) {
     totalDuration += rendered[i].clipDur;
     if (i < rendered.length - 1) totalDuration -= xfadeDur;
   }
-  const dialogueCount = 0;
   console.log(
-    `[Compose] ${nScenes} scenes, ${totalDuration.toFixed(1)}s total ` +
-      `(${xfadeDur}s xfade), ${dialogueCount} dialogue lines`
+    `[Compose] ${nScenes} scenes, ${totalDuration.toFixed(1)}s total (${xfadeDur}s xfade)`
   );
 
   // Build ffmpeg inputs list:
@@ -176,7 +174,7 @@ export async function composeVideo(rendered, outputPath, options = {}) {
 
   let bgmIdx = -1;
   if (bgMusic && existsSync(bgMusic)) {
-    bgmIdx = nScenes + dialogueCount;
+    bgmIdx = nScenes;
     inputs.push(`-stream_loop -1 -i "${bgMusic}"`);
   }
 
@@ -239,7 +237,7 @@ export async function composeVideo(rendered, outputPath, options = {}) {
     `"${outputPath}"`,
   ].join(" ");
 
-  console.log(`[Compose] Running ffmpeg (${nScenes} scenes + ${dialogueCount} dialogue + ${bgmIdx >= 0 ? "bgm" : "no bgm"})...`);
+  console.log(`[Compose] Running ffmpeg (${nScenes} scenes + ${bgmIdx >= 0 ? "bgm" : "no bgm"})...`);
   const result = spawnSync(cmd, { shell: true, encoding: "utf8", timeout: 600_000 });
 
   // Cleanup temp files
