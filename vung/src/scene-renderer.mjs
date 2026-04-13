@@ -28,7 +28,7 @@ const TTS_MODEL = "gemini-2.5-flash-preview-tts";
 
 // Gemini TTS fails on inputs with too few phonemes (e.g. "…Ủa?", "Hả?!")
 // Inputs shorter than this threshold get padded with "Ờ, " prefix
-const TTS_MIN_CHARS = 8;
+const TTS_MIN_CHARS = 15;
 
 // ── Prompt rules (loaded from vung/inputs/prompt_rules.md) ──────────
 // Cho phép chỉnh prompt mà không sửa code — edit prompt_rules.md rồi re-run.
@@ -722,30 +722,33 @@ async function generateDialogueAudio(scene, outputDir) {
 
     console.log(`[Render] Scene ${scene.id} → TTS ${char.name}: "${line.text.slice(0, 40)}..."`);
 
-    // Southern Vietnamese accent directive via systemInstruction.
-    // This is NOT read aloud by TTS — it's context that guides the
-    // voice model to use Southern Vietnamese pronunciation patterns.
-    const accentDirective = PROMPT_RULES.TTS_ACCENT ||
-      "Tất cả nhân vật nói giọng miền Nam Việt Nam. Giọng phải tự nhiên, rõ ràng.";
-
-    const pcmBuffer = await withKeyRotation("tts", async (client) => {
-      const res = await client.models.generateContent({
-        model: TTS_MODEL,
-        systemInstruction: { parts: [{ text: accentDirective }] },
-        contents: [{ parts: [{ text: fullText }] }],
-        config: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: char.voice },
+    // TTS is NON-FATAL: if Gemini TTS fails (short text, model confusion,
+    // 400 INVALID_ARGUMENT "Model tried to generate text"), skip this line
+    // rather than crashing the entire pipeline. Scene still has Veo native
+    // audio which is the primary audio source.
+    let pcmBuffer;
+    try {
+      pcmBuffer = await withKeyRotation("tts", async (client) => {
+        const res = await client.models.generateContent({
+          model: TTS_MODEL,
+          contents: [{ parts: [{ text: fullText }] }],
+          config: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: char.voice },
+              },
             },
           },
-        },
+        });
+        const part = res.candidates?.[0]?.content?.parts?.[0];
+        if (!part?.inlineData?.data) throw new Error("TTS returned no audio");
+        return Buffer.from(part.inlineData.data, "base64");
       });
-      const part = res.candidates?.[0]?.content?.parts?.[0];
-      if (!part?.inlineData?.data) throw new Error("TTS returned no audio");
-      return Buffer.from(part.inlineData.data, "base64");
-    });
+    } catch (ttsErr) {
+      console.log(`[Render] ⚠ TTS failed for "${line.text.slice(0, 30)}" (${ttsErr.message?.slice(0, 60)}), skipping line`);
+      continue;
+    }
 
     const wavBuffer = writeWavHeader(pcmBuffer, 24000);
     ensureDir(outputPath);
