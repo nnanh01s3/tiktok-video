@@ -564,8 +564,14 @@ function buildVeoMotionPrompt(scene) {
     endingHint,
     dialogueHint,
     PROMPT_RULES.VEO_STYLE || "Phong cách pixar 3D cartoon, chuyển động mượt, màu sắc tươi.",
-    PROMPT_RULES.VEO_NO_NARRATION || "QUAN TRỌNG: KHÔNG có lời dẫn chuyện, KHÔNG có voice-over tiếng Anh. " +
-      "Chỉ có nhân vật nói tiếng Việt và âm thanh môi trường rừng.",
+    PROMPT_RULES.VEO_CHARACTER_IDENTITY ||
+      "QUAN TRỌNG VỀ NHÂN VẬT: Mỗi nhân vật phải giữ nguyên hình dạng, màu sắc, kích thước " +
+      "từ đầu đến cuối clip 8 giây. KHÔNG ĐƯỢC biến đổi nhân vật này thành nhân vật khác.",
+    PROMPT_RULES.VEO_NO_DUPLICATE ||
+      "Mỗi nhân vật chỉ xuất hiện ĐÚNG MỘT LẦN trong khung hình.",
+    PROMPT_RULES.VEO_NO_NARRATION ||
+      "QUAN TRỌNG: KHÔNG có lời dẫn chuyện, KHÔNG có voice-over tiếng Anh. " +
+      "Chỉ có nhân vật nói tiếng Việt giọng miền Nam và âm thanh môi trường rừng.",
   ].join(" ").replace(/\s+/g, " ").trim();
 }
 
@@ -713,9 +719,16 @@ async function generateDialogueAudio(scene, outputDir) {
 
     console.log(`[Render] Scene ${scene.id} → TTS ${char.name}: "${line.text.slice(0, 40)}..."`);
 
+    // Southern Vietnamese accent directive via systemInstruction.
+    // This is NOT read aloud by TTS — it's context that guides the
+    // voice model to use Southern Vietnamese pronunciation patterns.
+    const accentDirective = PROMPT_RULES.TTS_ACCENT ||
+      "Tất cả nhân vật nói giọng miền Nam Việt Nam. Giọng phải tự nhiên, rõ ràng.";
+
     const pcmBuffer = await withKeyRotation("tts", async (client) => {
       const res = await client.models.generateContent({
         model: TTS_MODEL,
+        systemInstruction: { parts: [{ text: accentDirective }] },
         contents: [{ parts: [{ text: fullText }] }],
         config: {
           responseModalities: ["AUDIO"],
