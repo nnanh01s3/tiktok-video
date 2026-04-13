@@ -396,23 +396,26 @@ async function generateSceneImageWithRefs(scene, outputPath) {
 
   // gemini-2.5-flash-image outputs 1024x1024 (no aspect ratio control via
   // generateContent). Post-process to 1080x1920 (9:16) for Veo starting frame.
-  // Strategy: scale width to 1080, then pad height to 1920 with blurred
-  // extension of the image (looks more natural than black bars).
+  //
+  // Strategy: CROP TO FILL (not pad with black bars).
+  // Scale up so the SMALLER dimension fills the target, then center-crop.
+  // For 1024x1024 → scale to 1920x1920 (height fills) → crop center 1080x1920.
+  // This cuts ~22% of horizontal content but eliminates ugly black bars.
   const rawPath = outputPath.replace(/\.png$/, "_raw.png");
   writeFileSync(rawPath, buffer);
 
-  const padCmd = [
+  const cropCmd = [
     `${FFMPEG} -y -i "${rawPath}"`,
-    `-vf "scale=1080:-1,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black"`,
+    `-vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"`,
     `"${outputPath}"`,
   ].join(" ");
-  const padResult = spawnSync(padCmd, { shell: true, encoding: "utf8", timeout: 30_000 });
-  if (padResult.status !== 0) {
+  const cropResult = spawnSync(cropCmd, { shell: true, encoding: "utf8", timeout: 30_000 });
+  if (cropResult.status !== 0) {
     // Fallback: keep raw image if FFmpeg fails
-    console.log(`[Render] ⚠ FFmpeg pad failed, using raw 1024x1024`);
+    console.log(`[Render] ⚠ FFmpeg crop failed, using raw image`);
     writeFileSync(outputPath, buffer);
   } else {
-    console.log(`[Render] Scene ${scene.id} padded to 1080x1920 (9:16)`);
+    console.log(`[Render] Scene ${scene.id} cropped to 1080x1920 (9:16)`);
   }
   // Clean raw temp file
   try { unlinkSync(rawPath); } catch {}

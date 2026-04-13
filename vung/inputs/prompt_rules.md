@@ -53,6 +53,10 @@ Mỗi nhân vật chỉ xuất hiện ĐÚNG MỘT LẦN trong khung hình. KHÔ
 
 Tất cả nhân vật nói giọng miền Nam Việt Nam (Southern Vietnamese accent). Giọng phải tự nhiên, rõ ràng, phù hợp tính cách nhân vật. Giữ đúng giọng miền Nam xuyên suốt tất cả các tập phim.
 
+## ASPECT_RATIO
+
+Tất cả hình ảnh và video PHẢI ở tỷ lệ 9:16 (1080x1920 pixel, vertical/portrait). Đây là chuẩn TikTok. Hình ảnh sinh ra từ Imagen sẽ được crop-to-fill (không pad viền đen) qua FFmpeg. Veo clip cũng phải config aspectRatio: "9:16".
+
 ## SPECIES_MAP
 
 momo = chú khỉ

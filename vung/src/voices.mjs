@@ -53,6 +53,31 @@ export const CHARACTERS = {
     visualPrompt: null,
     negativePrompt: null,
   },
+  // ── Secondary characters (appear in specific episodes) ──
+  "sóc phụ": {
+    name: "Sóc phụ",
+    role: "squirrel-extra",
+    voice: "Puck", // Upbeat, quick
+    style: "Speak quick, casual. Vietnamese.",
+    visualPrompt: "a small squirrel, brown fur, fluffy tail, cute expression",
+    negativePrompt: null,
+  },
+  chim: {
+    name: "Chim",
+    role: "bird-messenger",
+    voice: "Fenrir", // Warm
+    style: "Speak casual, relaxed. Vietnamese.",
+    visualPrompt: "a small colorful bird, messenger bird perched on a branch",
+    negativePrompt: null,
+  },
+  "chim khác": {
+    name: "Chim khác",
+    role: "bird-messenger-2",
+    voice: "Sadaltager", // Calm
+    style: "Speak chill, nonchalant. Vietnamese.",
+    visualPrompt: "a different small bird, slightly different color from the first bird",
+    negativePrompt: null,
+  },
 };
 
 /**
@@ -76,6 +101,7 @@ const CHARACTER_ALIASES = {
   "voice over": "narrator",
   "voiceover": "narrator",
   "vo": "narrator",
+  "sóc": "sóc phụ",
 };
 
 /**
