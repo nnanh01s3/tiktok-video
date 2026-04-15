@@ -66,13 +66,15 @@ export function pickAvailableModel() {
   return null; // All models exhausted
 }
 
-// Scene prompt templates by mood — appended to quote-specific prompts
+// Scene prompt templates by mood — appended to quote-specific prompts.
+// Brightness tuned slightly up per user feedback (Option A: keep cinematic
+// feel, just nudge lighting keywords toward brighter/warmer tones).
 const SCENE_STYLES = {
-  epic: "cinematic lighting, dramatic clouds, golden hour, slow camera movement, 4K film grain",
-  calm: "soft natural light, gentle breeze, serene atmosphere, smooth slow-motion, shallow depth of field",
-  dark: "moody lighting, rain, neon reflections, urban night scene, atmospheric fog",
-  nature: "lush green landscape, flowing water, morning mist, birds in flight, organic movement",
-  abstract: "flowing particles, cosmic nebula colors, abstract light trails, ethereal atmosphere",
+  epic: "bright cinematic lighting, luminous golden hour, warm sunbeams piercing clouds, slow camera movement, 4K film grain",
+  calm: "bright soft natural light, gentle breeze, serene airy atmosphere, smooth slow-motion, shallow depth of field",
+  dark: "twilight with warm ambient glow, soft rain with neon reflections, dusk city scene with street lamps, atmospheric haze",
+  nature: "sunlit lush landscape, flowing water catching light, bright morning mist, birds in flight, organic movement",
+  abstract: "bright flowing particles, warm cosmic colors, luminous light trails, ethereal glowing atmosphere",
 };
 
 let _client;

@@ -68,26 +68,62 @@ export async function generateGeminiTTS(text, outputPath, options = {}) {
   // Combine style instruction with the actual text
   const fullText = `${styleInstruction}\n\n${text}`;
 
-  const response = await client().models.generateContent({
-    model,
-    contents: [{ parts: [{ text: fullText }] }],
-    config: {
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: voice },
-        },
-      },
-    },
-  });
+  // Voice consistency: retry hard before falling back to Edge TTS.
+  // User locked the voice to Algenib — switching to Edge changes the voice
+  // audibly, breaking brand consistency across videos. 5 retries with
+  // exponential backoff (1s, 2s, 4s, 8s, 16s) give Gemini ~30s total to
+  // recover from transient errors (500, rate limits, timeouts).
+  const MAX_RETRIES = 5;
+  let lastError;
+  let pcmBuffer;
 
-  // Extract audio data
-  const part = response.candidates?.[0]?.content?.parts?.[0];
-  if (!part?.inlineData?.data) {
-    throw new Error("Gemini TTS returned no audio data");
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const response = await client().models.generateContent({
+        model,
+        contents: [{ parts: [{ text: fullText }] }],
+        config: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: voice },
+            },
+          },
+        },
+      });
+
+      const part = response.candidates?.[0]?.content?.parts?.[0];
+      if (!part?.inlineData?.data) {
+        throw new Error("Gemini TTS returned no audio data");
+      }
+
+      pcmBuffer = Buffer.from(part.inlineData.data, "base64");
+      if (attempt > 0) {
+        console.log(`[Gemini TTS] ✓ succeeded on retry ${attempt + 1} (voice=${voice})`);
+      }
+      break; // success — exit retry loop
+    } catch (err) {
+      lastError = err;
+      const isRetryable =
+        /5\d\d|rate.*limit|timeout|ECONN|ENOTFOUND|fetch failed|transient/i.test(
+          String(err?.message || "")
+        );
+      if (attempt < MAX_RETRIES - 1 && isRetryable) {
+        const backoffMs = 1000 * 2 ** attempt; // 1s, 2s, 4s, 8s, 16s
+        console.log(
+          `[Gemini TTS] attempt ${attempt + 1}/${MAX_RETRIES} failed ` +
+          `(${err.message?.slice(0, 80)}), retrying in ${backoffMs}ms...`
+        );
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      }
+      // Non-retryable OR last attempt failed — bubble up (tts.js will
+      // fall back to Edge as last resort, with prominent warning)
+      throw err;
+    }
   }
 
-  const pcmBuffer = Buffer.from(part.inlineData.data, "base64");
+  if (!pcmBuffer) throw lastError || new Error("Gemini TTS exhausted retries");
 
   ensureDir(outputPath);
 

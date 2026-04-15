@@ -37,6 +37,7 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const STEP = process.argv.find((a) => a.startsWith("--step="))?.split("=")[1];
 const CATEGORY = process.argv.find((a) => a.startsWith("--category="))?.split("=")[1];
 const VEO_MODEL = process.argv.find((a) => a.startsWith("--veo="))?.split("=")[1] || "fast";
+const DELAY_MIN = parseInt(process.argv.find((a) => a.startsWith("--delay="))?.split("=")[1] || "1", 10);
 
 const QUEUE_DIR = process.env.QUEUE_DIR || "./queue";
 const NICHE = "quotes";
@@ -722,12 +723,17 @@ export async function runPipeline(opts = {}) {
     log(`  Imagen + Ken Burns clip ${i + 1}/${quotes.length}...`);
     const imgPath = `${QUEUE_DIR}/${jobId}-img-${i}.png`;
 
-    // Adapt Veo prompt for still image
+    // Adapt Veo prompt for still image.
+    // Brightness: "bright cinematic lighting, warm tones, well-lit" instead
+    // of generic "cinematic lighting" — Imagen interprets "cinematic" as
+    // moody/dramatic by default, producing dark scenes. Explicit brightness
+    // keywords keep the mood inspirational/uplifting per user feedback.
     const imgPrompt = scenePrompts[i]
       .replace(/^Vertical 9:16 video\.\s*/i, "")
       .replace(/No text, no people talking\.\s*/i, "")
       .replace(/Cinematic, smooth camera movement\.\s*/i, "")
-      + " Vertical 9:16 aspect ratio. Ultra high quality, cinematic lighting, 4K detail.";
+      + " Vertical 9:16 aspect ratio. Ultra high quality, " +
+      "bright cinematic lighting, warm natural tones, well-lit, vibrant, 4K detail.";
 
     await generateImage(imgPrompt, imgPath);
 
@@ -838,7 +844,7 @@ export async function runPipeline(opts = {}) {
     : "";
 
   const caption = `${scriptResult.caption}${authorCredits}\n\n${hashtags.join(" ")}`;
-  const scheduledAt = new Date(Date.now() + 60_000).toISOString();
+  const scheduledAt = new Date(Date.now() + DELAY_MIN * 60_000).toISOString();
 
   const postResult = await quotePoster.scheduleTikTok({
     mediaRef,

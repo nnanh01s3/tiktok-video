@@ -93,7 +93,15 @@ export async function generateVoiceover(script, outputPath, options = {}) {
       });
       return result;
     } catch (err) {
-      console.log(`[TTS] Gemini TTS failed (${err.message}), falling back to Edge TTS`);
+      // Gemini TTS retries already exhausted inside generateGeminiTTS (5 tries
+      // with backoff). Reaching here means Gemini is truly down. Falling back
+      // to Edge TTS is AUDIBLE — voice changes from Algenib (gravelly deep)
+      // to NamMinhNeural (native Vietnamese). User will notice the shift.
+      console.log(
+        `[TTS] ⚠️ VOICE FALLBACK: Gemini Algenib unavailable after 5 retries ` +
+        `(${err.message?.slice(0, 80)}). Switching to Edge NamMinhNeural — ` +
+        `voice will sound different from normal videos.`
+      );
     }
   }
 

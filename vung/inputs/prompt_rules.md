@@ -55,7 +55,23 @@ Tất cả nhân vật nói giọng miền Nam Việt Nam (Southern Vietnamese a
 
 ## ASPECT_RATIO
 
-Tất cả hình ảnh và video PHẢI ở tỷ lệ 9:16 (1080x1920 pixel, vertical/portrait). Đây là chuẩn TikTok. Hình ảnh sinh ra từ Imagen sẽ được crop-to-fill (không pad viền đen) qua FFmpeg. Veo clip cũng phải config aspectRatio: "9:16".
+Tất cả hình ảnh và video PHẢI ở tỷ lệ 9:16 (1080x1920 pixel, vertical/portrait). Đây là chuẩn TikTok. Hình ảnh sinh ra từ Imagen sẽ được crop-to-fill (không pad viền đen) qua FFmpeg. Veo clip cũng phải config aspectRatio: "9:16". Cover image cho TikTok cũng phải 9:16.
+
+## COVER_HEADER
+
+Dynamic Pixar 3D cartoon cover art for a TikTok animated short episode. Eye-catching hero composition with the featured character(s) in a dynamic expressive pose that hints at the episode's story. Vibrant saturated colors, dramatic cinematic lighting, magical forest setting. Subject centered. Keep the TOP 220 pixels and BOTTOM 260 pixels of the 1080x1920 frame relatively uncluttered — those areas will be covered by text banners added in post-processing. 9:16 vertical aspect ratio.
+
+## COVER_NEGATIVE
+
+Avoid: humans, people, photorealism, real animals, dogs, cats, duplicate characters, multiple instances of same character, watermarks, logos, ANY TEXT in the image, ANY LETTERS, captions, subtitles, floating text, Pixar watermark, TikTok caption, stock footage artifacts, clothing, shirts, pants, robes
+
+## COVER_TOP_BANNER
+
+RUNG XI TIN
+
+## COVER_BOTTOM_BANNER_TEMPLATE
+
+TAP {episode}: {title}
 
 ## SPECIES_MAP
 

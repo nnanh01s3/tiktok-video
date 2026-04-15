@@ -360,7 +360,7 @@ function parseDialogue(dialogueText) {
 
     // Character line: **Name:** or **Name (direction):**
     // Allow optional bullet prefix "* " for v2 format.
-    const charMatch = line.match(/^(?:\*\s+)?\*\*([^(*]+?)(?:\s*\(([^)]+)\))?\s*:\*\*/);
+    const charMatch = line.match(/^(?:[\*\-]\s+)?\*\*([^(*]+?)(?:\s*\(([^)]+)\))?\s*:\*\*/);
     if (charMatch) {
       currentChar = normalizeCharacterKey(charMatch[1]);
       currentDirection = cleanDialogueDirection(charMatch[2]);

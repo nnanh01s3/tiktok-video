@@ -25,6 +25,7 @@ import { join } from "path";
 import { genCaptionAI, genCaptionFallback } from "./caption.mjs";
 import { ShopeeAffiliate, closeCdpBrowser } from "./affiliate.mjs";
 import { shortenUrl } from "./shorten_url.mjs";
+import { getShortLinkFromCsv } from "./short_link_lookup.mjs";
 import { PAGES, FFMPEG, FONT, BASE_DIR, MAX_PER_DAY, MAX_PER_RUN } from "./config.mjs";
 
 // ── Parse CLI args ─────────────────────────────────────────────────────────
@@ -263,7 +264,20 @@ const poster = createPoster(PAGE);
 
 async function appendAffLink(caption, product) {
   if (!product?.affiliateLink) return caption;
-  const shortLink = await shortenUrl(product.affiliateLink);
+  // Prefer official Shopee short link from CSV lookup (s.shopee.vn/xxx).
+  // CSVs are exported manually from affiliate.shopee.vn dashboard via
+  // "Lấy link" button → dropped into D:/tiktok/ (see short_link_lookup.mjs).
+  // Benefits vs is.gd: trusted domain, embedded commission tracking,
+  // less likely to be flagged as spam by FB/TikTok.
+  let shortLink = getShortLinkFromCsv(product.itemId);
+  if (shortLink) {
+    log(`   🔗 CSV short link: ${shortLink}`);
+  } else {
+    // Fallback: is.gd if product not in any loaded CSV (e.g. freshly
+    // discovered product user hasn't exported yet).
+    shortLink = await shortenUrl(product.affiliateLink);
+    log(`   🔗 is.gd fallback: ${shortLink}`);
+  }
   return `${caption}\n\n🛒 Mua ngay: ${shortLink}`;
 }
 
@@ -299,7 +313,10 @@ async function postVideo(videoPath, caption, product, slotIdx) {
 
   // Affiliate comment (PostFast only, 60 min after post)
   if (PAGE.postComments && product?.affiliateLink && results.fbPostId) {
-    const shortLink = await shortenUrl(product.affiliateLink);
+    // Same strategy as caption: prefer CSV lookup, fallback to is.gd
+    const shortLink =
+      getShortLinkFromCsv(product.itemId) ||
+      (await shortenUrl(product.affiliateLink));
     const comment = `MUA NGAY TẠI ĐÂY👇👇👇\n${shortLink}\n${shortLink}`;
     const commentDelay = 60 * 60_000;
     const timer = setTimeout(async () => {
