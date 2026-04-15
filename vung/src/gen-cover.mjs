@@ -215,9 +215,10 @@ function escapePath(p) {
 function addTextBanners(inputPath, outputPath, episode) {
   const topBanner = (RULES.COVER_TOP_BANNER || "RUNG XI TIN").trim();
   const bottomTemplate = (RULES.COVER_BOTTOM_BANNER_TEMPLATE || "TAP {episode}: {title}").trim();
+  // Montserrat-Bold supports Vietnamese diacritics natively — keep tiếng Việt có dấu.
   const bottomBanner = bottomTemplate
     .replace("{episode}", String(episode.episodeNumber).padStart(2, "0"))
-    .replace("{title}", removeDiacritics(episode.episodeTitle).toUpperCase());
+    .replace("{title}", episode.episodeTitle.toUpperCase());
 
   const fontBold = escapePath(FONT_BOLD);
   const fontSemi = escapePath(FONT_SEMI);

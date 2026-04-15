@@ -67,11 +67,11 @@ Avoid: humans, people, photorealism, real animals, dogs, cats, duplicate charact
 
 ## COVER_TOP_BANNER
 
-RUNG XI TIN
+RỪNG XÌ TIN
 
 ## COVER_BOTTOM_BANNER_TEMPLATE
 
-TAP {episode}: {title}
+TẬP {episode}: {title}
 
 ## SPECIES_MAP
 
