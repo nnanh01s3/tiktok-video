@@ -41,7 +41,10 @@ function loadPromptRules() {
   }
   const content = readFileSync(PROMPT_RULES_PATH, "utf8");
   const rules = {};
-  const sectionRegex = /^## (\w+)\s*\n\n([\s\S]*?)(?=\n## |\n---|\s*$)/gm;
+  // Lookahead stops at: next ## section, --- separator, or true EOF.
+  // NOTE: do NOT use \s*$ here — with /m flag it matches blank lines within
+  // a section, prematurely truncating multi-paragraph rules like VEO_CHARACTER_VOICES.
+  const sectionRegex = /^## (\w+)\s*\n\n([\s\S]*?)(?=\n## |\n---|$(?![\s\S]))/gm;
   let match;
   while ((match = sectionRegex.exec(content))) {
     const key = match[1].trim();
@@ -562,10 +565,20 @@ function buildVeoMotionPrompt(scene) {
       spokenLines.map((d) => `${d.character} nói "${d.text}"`).join(", ")
     : " Scene không có lời thoại, chỉ có âm thanh môi trường.";
 
+  // Voice anchoring: inject full character voice descriptions when characters
+  // speak in this scene. Extract ONLY the relevant character sections from
+  // the full VEO_CHARACTER_VOICES rule (to keep prompt compact).
+  const speakingCharsInScene = [...new Set(
+    scene.dialogue.filter((d) => d.character !== "narrator").map((d) => d.character)
+  )];
+  const hasNarrator = scene.dialogue.some((d) => d.character === "narrator");
+  const voiceAnchoring = buildVoiceAnchoring(speakingCharsInScene, hasNarrator);
+
   return [
     primaryAction || scene.goal || scene.title,
     endingHint,
     dialogueHint,
+    voiceAnchoring,
     PROMPT_RULES.VEO_STYLE || "Phong cách pixar 3D cartoon, chuyển động mượt, màu sắc tươi.",
     PROMPT_RULES.VEO_CHARACTER_IDENTITY ||
       "QUAN TRỌNG VỀ NHÂN VẬT: Mỗi nhân vật phải giữ nguyên hình dạng, màu sắc, kích thước " +
@@ -575,7 +588,44 @@ function buildVeoMotionPrompt(scene) {
     PROMPT_RULES.VEO_NO_NARRATION ||
       "QUAN TRỌNG: KHÔNG có lời dẫn chuyện, KHÔNG có voice-over tiếng Anh. " +
       "Chỉ có nhân vật nói tiếng Việt giọng miền Nam và âm thanh môi trường rừng.",
-  ].join(" ").replace(/\s+/g, " ").trim();
+  ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Extract voice descriptions for speaking characters from VEO_CHARACTER_VOICES rule.
+ * Injects ONLY the characters who speak in this scene → keeps prompt compact.
+ * Full rule is long (~600 chars); per-scene extraction usually 150-300 chars.
+ *
+ * The VEO_CHARACTER_VOICES rule in prompt_rules.md uses format:
+ *   - **Momo (khỉ)**: giọng bé trai...
+ *   - **Tiko (rùa)**: giọng nam trung niên...
+ *
+ * This function extracts bullet lines matching the speaking characters + narrator.
+ */
+function buildVoiceAnchoring(speakingChars, includeNarrator) {
+  const rule = PROMPT_RULES.VEO_CHARACTER_VOICES;
+  if (!rule || speakingChars.length === 0 && !includeNarrator) return "";
+
+  // Build set of character names to match (capitalized for regex match)
+  const targetNames = new Set(
+    speakingChars.map((c) => c.charAt(0).toUpperCase() + c.slice(1))
+  );
+  if (includeNarrator) targetNames.add("Narrator");
+
+  // Match bullet lines like "- **Momo (khỉ)**: ..." OR "- **Narrator**: ..."
+  const lines = [];
+  const bulletRe = /^-\s+\*\*([^(*]+?)(?:\s*\([^)]+\))?\*\*:\s*(.+)$/gm;
+  let m;
+  while ((m = bulletRe.exec(rule))) {
+    const charName = m[1].trim();
+    if (targetNames.has(charName)) {
+      lines.push(`${charName}: ${m[2].trim()}`);
+    }
+  }
+
+  if (lines.length === 0) return "";
+  return "QUAN TRỌNG VỀ GIỌNG NÓI (phải nhất quán 100% với mô tả sau, giữ nguyên giọng xuyên suốt tất cả tập phim): " +
+    lines.join(". ");
 }
 
 async function generateSceneClip(scene, imagePath, outputPath) {

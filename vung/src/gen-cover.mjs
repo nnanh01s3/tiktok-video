@@ -39,7 +39,7 @@ function loadPromptRules() {
   if (!existsSync(PROMPT_RULES_PATH)) return {};
   const content = readFileSync(PROMPT_RULES_PATH, "utf8");
   const rules = {};
-  const re = /^## (\w+)\s*\n\n([\s\S]*?)(?=\n## |\n---|\s*$)/gm;
+  const re = /^## (\w+)\s*\n\n([\s\S]*?)(?=\n## |\n---|$(?![\s\S]))/gm;
   let m;
   while ((m = re.exec(content))) rules[m[1].trim()] = m[2].trim();
   return rules;

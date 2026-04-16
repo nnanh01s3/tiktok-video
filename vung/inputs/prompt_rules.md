@@ -41,6 +41,28 @@ Phong cách pixar 3D cartoon, chuyển động mượt, màu sắc tươi.
 
 QUAN TRỌNG: KHÔNG có lời dẫn chuyện, KHÔNG có voice-over tiếng Anh. Chỉ có nhân vật nói tiếng Việt giọng miền Nam và âm thanh môi trường rừng.
 
+## VEO_CHARACTER_VOICES
+
+QUAN TRỌNG VỀ GIỌNG NÓI (PHẢI GIỮ NHẤT QUÁN CHÍNH XÁC NHƯ NHAU XUYÊN SUỐT TẤT CẢ SCENE VÀ TẤT CẢ TẬP PHIM):
+
+- **Momo (khỉ)**: giọng bé trai tuổi teen khoảng 12-13, tông cao trong trẻo, nói nhanh, nhiều năng lượng, giọng miền Nam Việt Nam, tinh nghịch láu lỉnh, hay cười khúc khích, đôi khi cao giọng khi phấn khích. KHÔNG có accent vùng khác, KHÔNG giọng người lớn.
+
+- **Tiko (rùa)**: giọng nam trung niên khoảng 40 tuổi, trầm ấm, nói chậm rãi và rõ từng từ, điềm đạm thông thái, giọng miền Nam Việt Nam, có sắc thái suy tư. KHÔNG cao giọng, KHÔNG nhanh.
+
+- **Lala (cáo)**: giọng nữ trẻ khoảng 18-20 tuổi, tông cao thanh trong, nói diễn cảm dramatic, giọng miền Nam Việt Nam, điệu đà sang chảnh, hay kéo dài âm cuối khi xúc động. KHÔNG trầm, KHÔNG giọng trẻ con.
+
+- **Bobo (gấu)**: giọng nam thanh niên khoảng 18 tuổi, tông trung, ấm áp thân thiện, nói chậm hơi lề mề, giọng miền Nam Việt Nam, ngây ngô dễ thương. KHÔNG cao giọng sắc, KHÔNG nhanh.
+
+- **Sóc phụ**: giọng bé trai nhỏ tuổi, nhanh, trẻ con, miền Nam.
+
+- **Chim**: giọng nam trẻ, tông trung, bình thản, miền Nam.
+
+- **Chim khác**: giọng nam trẻ, hơi cao hơn Chim, tỉnh bơ thư giãn, miền Nam.
+
+- **Narrator**: giọng nam trưởng thành ấm áp, kể chuyện rõ ràng, miền Nam.
+
+LƯU Ý: Mỗi scene Veo sẽ đọc mô tả giọng ở trên TRƯỚC khi sinh audio → phải giữ EXACTLY như nhau cho mỗi nhân vật. KHÔNG được thay đổi giọng giữa các scene. KHÔNG được thay đổi giọng giữa các tập phim.
+
 ## VEO_CHARACTER_IDENTITY
 
 QUAN TRỌNG VỀ NHÂN VẬT: Mỗi nhân vật phải giữ nguyên hình dạng, màu sắc, kích thước từ đầu đến cuối clip 8 giây. KHÔNG ĐƯỢC biến đổi nhân vật này thành nhân vật khác trong quá trình chuyển động. Ví dụ: nếu Momo (khỉ nâu) đang đứng trên cây thì khi nhảy xuống vẫn phải là Momo (khỉ nâu), KHÔNG được biến thành Tiko (rùa xanh). Giữ đúng species và màu sắc cho từng nhân vật xuyên suốt clip.
