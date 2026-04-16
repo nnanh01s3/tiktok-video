@@ -59,7 +59,7 @@ Tất cả hình ảnh và video PHẢI ở tỷ lệ 9:16 (1080x1920 pixel, ver
 
 ## COVER_HEADER
 
-Dynamic Pixar 3D cartoon cover art for a TikTok animated short episode. Eye-catching hero composition with the featured character(s) in a dynamic expressive pose that hints at the episode's story. Vibrant saturated colors, dramatic cinematic lighting, magical forest setting. Subject centered. Keep the TOP 220 pixels and BOTTOM 260 pixels of the 1080x1920 frame relatively uncluttered — those areas will be covered by text banners added in post-processing. 9:16 vertical aspect ratio.
+Dynamic Pixar 3D cartoon cover art for a TikTok animated short episode. Eye-catching hero composition with the featured character(s) in a dynamic expressive pose that hints at the episode's story. Vibrant saturated colors, dramatic cinematic lighting, magical forest setting. Subject positioned slightly above or below center — the exact CENTER of the frame (middle 260 pixels) will have a text banner overlay added in post-processing. 9:16 vertical aspect ratio.
 
 ## COVER_NEGATIVE
 

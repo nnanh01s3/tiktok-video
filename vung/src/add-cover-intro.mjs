@@ -21,11 +21,11 @@ const args = process.argv.slice(2);
 const tapArg = args.includes("--episode")
   ? args[args.indexOf("--episode") + 1]
   : null;
-// Default 3s — long enough for viewers to read title + identify characters,
-// short enough to keep TikTok watch-time algorithm happy.
+// Default 5s — enough time for viewers to read title, identify characters,
+// and register the episode theme before video starts.
 const duration = args.includes("--duration")
   ? parseFloat(args[args.indexOf("--duration") + 1])
-  : 3.0;
+  : 5.0;
 const replaceOriginal = args.includes("--replace"); // overwrite existing _final.mp4
 
 if (!tapArg) {

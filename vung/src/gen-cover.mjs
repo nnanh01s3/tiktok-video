@@ -235,23 +235,26 @@ function addTextBanners(inputPath, outputPath, episode) {
     ? Math.max(36, Math.floor(64 * 920 / estWidth))
     : 64;
 
-  // Top banner: bold gold on dark semi-transparent box at top
-  // Bottom banner: bold gold on dark semi-transparent box at bottom
+  // CENTER layout: series name + episode title stacked in the middle of frame.
+  // Dark band centered vertically, both text lines inside it.
+  // Better for TikTok: eye naturally looks at center first.
+  const bandH = 260; // height of dark band
+  const bandY = `(h-${bandH})/2`; // vertically centered
   const filterBody = [
-    // Top dark band + text
-    `drawbox=x=0:y=0:w=iw:h=200:color=black@0.55:t=fill`,
+    // Centered dark band
+    `drawbox=x=0:y=${bandY}:w=iw:h=${bandH}:color=black@0.6:t=fill`,
+    // Series name (top line in band)
     `drawtext=fontfile='${fontBold}':text='${top}':` +
-      `fontsize=84:fontcolor=#FFE08A:` +
-      `x=(w-text_w)/2:y=55:` +
-      `borderw=4:bordercolor=black@0.9:` +
-      `shadowcolor=black@0.7:shadowx=3:shadowy=3`,
-    // Bottom dark band + text (auto-shrink fontsize for long titles)
-    `drawbox=x=0:y=h-240:w=iw:h=240:color=black@0.55:t=fill`,
+      `fontsize=72:fontcolor=#FFE08A:` +
+      `x=(w-text_w)/2:y=${bandY}+30:` +
+      `borderw=5:bordercolor=black@0.9:` +
+      `shadowcolor=black@0.8:shadowx=3:shadowy=3`,
+    // Episode title (bottom line in band, auto-shrink for long titles)
     `drawtext=fontfile='${fontBold}':text='${bottom}':` +
-      `fontsize=${bottomFontsize}:fontcolor=#FFE08A:` +
-      `x=(w-text_w)/2:y=h-160:` +
+      `fontsize=${bottomFontsize}:fontcolor=white:` +
+      `x=(w-text_w)/2:y=${bandY}+130:` +
       `borderw=4:bordercolor=black@0.9:` +
-      `shadowcolor=black@0.7:shadowx=3:shadowy=3`,
+      `shadowcolor=black@0.8:shadowx=3:shadowy=3`,
   ].join(",");
   const filter = `[0:v]${filterBody}[vout]`;
 
