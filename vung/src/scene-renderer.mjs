@@ -89,6 +89,28 @@ const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 const FONT_BOLD = "D:/tiktok/assets/fonts/Montserrat-Bold.ttf";
 const FONT_SEMI = "D:/tiktok/assets/fonts/Montserrat-SemiBold.ttf";
 
+// ── Southern Vietnamese dialect converter ────────────────────────────────
+// Uses Unicode property p{L} for word boundaries (JS  fails with
+// Vietnamese diacritics). Preserves capitalization.
+const SOUTHERN_DIALECT_MAP = [
+  ["tớ", "tui"], ["cậu", "bạn"], ["mình", "tui"],
+  ["nhé", "nha"], ["nhỉ", "hen"], ["chứ", "chớ"],
+  ["không", "hông"], ["vậy", "dzậy"], ["thế", "dzậy"],
+];
+
+function convertToSouthernDialect(text) {
+  if (!text) return text;
+  let result = text;
+  for (const [word, repl] of SOUTHERN_DIALECT_MAP) {
+    const esc = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?<!\\p{L})${esc}(?!\\p{L})`, "giu");
+    result = result.replace(re, (m) => {
+      return m[0] !== m[0].toLowerCase() ? repl[0].toUpperCase() + repl.slice(1) : repl;
+    });
+  }
+  return result;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 function ensureDir(filePath) {
   const dir = dirname(filePath);
@@ -559,10 +581,14 @@ function buildVeoMotionPrompt(scene) {
   // Include actual Vietnamese dialogue text so Veo lipsyncs it rather than
   // generating random English speech. Exclude "narrator" character (CTA
   // voice-over) because that's overlaid separately in post.
+  //
+  // Convert dialogue to Southern Vietnamese dialect before passing to Veo.
+  // Scripts may use Northern words ("tớ", "nhé") but Veo picks accent from
+  // the actual words — Southern words ("tui", "nè") produce Southern accent.
   const spokenLines = scene.dialogue.filter((d) => d.character !== "narrator");
   const dialogueHint = spokenLines.length > 0
-    ? " Nhân vật nói thoại tiếng Việt: " +
-      spokenLines.map((d) => `${d.character} nói "${d.text}"`).join(", ")
+    ? " Nhân vật nói thoại tiếng Việt giọng miền Nam: " +
+      spokenLines.map((d) => `${d.character} nói "${convertToSouthernDialect(d.text)}"`).join(", ")
     : " Scene không có lời thoại, chỉ có âm thanh môi trường.";
 
   // Voice anchoring: inject full character voice descriptions when characters
