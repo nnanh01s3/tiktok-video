@@ -102,6 +102,8 @@ const CHARACTER_ALIASES = {
   "voiceover": "narrator",
   "vo": "narrator",
   "sóc": "sóc phụ",
+  "sóc con": "sóc phụ",
+  "vo / chim đưa tin": "narrator",
 };
 
 /**
