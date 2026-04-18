@@ -155,15 +155,10 @@ export function getUnusedQuotes(category, limit = 5) {
     if (combined.length >= limit) return combined.slice(0, limit);
   }
 
-  // Fallback to old quotes table
-  return db
-    .prepare(
-      `SELECT * FROM quotes
-       WHERE category = ? AND (used_count = 0 OR last_used_at < datetime('now', '-90 days'))
-       ORDER BY used_count ASC, RANDOM()
-       LIMIT ?`
-    )
-    .all(category, limit);
+  // NO fallback to old quotes table (v1) — that data contains AI-fabricated
+  // quotes and English categories no longer used. Only quotes_v2 (verified,
+  // attributed, Vietnamese) is the source of truth.
+  return combined.length > 0 ? combined.slice(0, limit) : v2Quotes;
 }
 
 export function markQuotesUsed(ids) {
@@ -172,14 +167,10 @@ export function markQuotesUsed(ids) {
   const stmtV2 = db.prepare(
     `UPDATE quotes_v2 SET times_used = times_used + 1, used_at = datetime('now') WHERE id = ?`
   );
-  // Update old quotes table (for fallback quotes)
-  const stmtOld = db.prepare(
-    `UPDATE quotes SET used_count = used_count + 1, last_used_at = datetime('now') WHERE id = ?`
-  );
+  // Old quotes table (v1) no longer updated — only quotes_v2 is used.
   const tx = db.transaction((ids) => {
     for (const id of ids) {
       stmtV2.run(id);
-      stmtOld.run(id);
     }
   });
   tx(ids);
@@ -195,15 +186,9 @@ export function getQuoteStats() {
        FROM quotes_v2 GROUP BY category`
     )
     .all();
-  const oldStats = db
-    .prepare(
-      `SELECT category, COUNT(*) as total,
-              SUM(CASE WHEN used_count = 0 THEN 1 ELSE 0 END) as unused,
-              'legacy' as source
-       FROM quotes GROUP BY category`
-    )
-    .all();
-  return [...v2Stats, ...oldStats];
+  // Old quotes table (v1) excluded — contains AI-fabricated data.
+  // Only quotes_v2 is the source of truth.
+  return v2Stats;
 }
 
 // --- Video job helpers ---
