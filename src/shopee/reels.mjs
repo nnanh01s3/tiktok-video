@@ -108,19 +108,23 @@ async function scrapeTikTok(profileUrl) {
     return [];
   }
   const videos = [];
+  let skippedShort = 0;
   for (const line of result.stdout.trim().split("\n")) {
     try {
       const j = JSON.parse(line);
-      if (j.id && j.url) {
-        videos.push({
-          id: String(j.id),
-          url: j.url,
-          title: j.title || "",
-          duration: j.duration || 0,
-        });
-      }
+      if (!j.id || !j.url) continue;
+      // Skip videos shorter than 10s — FB Reels can't play them after
+      // FFmpeg re-encode (output <1MB → "lỗi khi phát video này")
+      if (j.duration && j.duration < 10) { skippedShort++; continue; }
+      videos.push({
+        id: String(j.id),
+        url: j.url,
+        title: j.title || "",
+        duration: j.duration || 0,
+      });
     } catch {}
   }
+  if (skippedShort) log(`   Skipped ${skippedShort} videos < 10s`);
   log(`   Found ${videos.length} videos`);
   return videos;
 }
@@ -229,7 +233,14 @@ function downloadVideo(video) {
     180000
   );
   if (existsSync(outPath) && statSync(outPath).size > 100000) {
-    log(`   ✅ ${Math.round(statSync(outPath).size / 1024 / 1024 * 10) / 10}MB`);
+    const sizeMB = statSync(outPath).size / 1024 / 1024;
+    // Videos < 0.5MB are too short for FB Reels (causes "lỗi khi phát")
+    if (sizeMB < 0.5) {
+      log(`   ⏭️ Too small (${sizeMB.toFixed(1)}MB) — skipping short video`);
+      try { unlinkSync(outPath); } catch {}
+      return null;
+    }
+    log(`   ✅ ${Math.round(sizeMB * 10) / 10}MB`);
     return outPath;
   }
   log(`   ❌ ${(result.stdout || result.stderr || "").slice(-200)}`);
@@ -349,7 +360,7 @@ log(`📋 Đã xử lý: ${state.processed_ids.length} videos`);
 const newVideos = [];
 const triedSources = [];
 for (let step = 0; step < SOURCES.length; step++) {
-  if (newVideos.length >= MAX) break;
+  if (newVideos.length >= MAX * 5) break;
   const idx = (sourceIdx + step) % SOURCES.length;
   const src = SOURCES[idx];
   triedSources.push(idx);
@@ -363,7 +374,9 @@ for (let step = 0; step < SOURCES.length; step++) {
       v._sourceIdx = idx;
       v._sourceName = src.name;
       newVideos.push(v);
-      if (newVideos.length >= MAX) break;
+      // Collect extra candidates (up to 5x MAX) so we can skip short/broken
+      // videos and still hit the target number of posts
+      if (newVideos.length >= MAX * 5) break;
     }
   }
   if (newVideos.length > 0) log(`   ➕ [${idx}] +${videos.filter(v => !state.processed_ids.includes(v.id)).length} new`);
@@ -376,13 +389,15 @@ if (newVideos.length === 0) {
   process.exit(0);
 }
 
-const toProcess = newVideos.slice(0, MAX);
-log(`📌 Xử lý ${toProcess.length} video(s)\n`);
+// Try all candidates, stop when we've posted MAX successfully
+const toProcess = newVideos;
+log(`📌 ${toProcess.length} candidates, target ${MAX} post(s)\n`);
 
 let success = 0;
 for (let i = 0; i < toProcess.length; i++) {
+  if (success >= MAX) break;
   const video = toProcess[i];
-  log(`\n[${i + 1}/${toProcess.length}] ${video._sourceName} — ${video.id}`);
+  log(`\n[${success + 1}/${MAX}] ${video._sourceName} — ${video.id}`);
   try {
     const raw = downloadVideo(video);
     if (!raw) {
