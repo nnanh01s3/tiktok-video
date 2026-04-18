@@ -78,6 +78,14 @@ export const CHARACTERS = {
     visualPrompt: "a different small bird, slightly different color from the first bird",
     negativePrompt: null,
   },
+  "thỏ rừng": {
+    name: "Thỏ rừng",
+    role: "rabbit-extra",
+    voice: "Aoede", // Bright
+    style: "Speak cheerful, fast, excited. Vietnamese.",
+    visualPrompt: "a small cute rabbit, white and brown fur, long ears, energetic",
+    negativePrompt: null,
+  },
 };
 
 /**
@@ -104,6 +112,7 @@ const CHARACTER_ALIASES = {
   "sóc": "sóc phụ",
   "sóc con": "sóc phụ",
   "vo / chim đưa tin": "narrator",
+  "thỏ rừng": "thỏ rừng",
 };
 
 /**
