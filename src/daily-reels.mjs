@@ -1,21 +1,23 @@
 /**
- * DAILY REELS RUN — 1 Reel per FB page/day for audience building.
+ * DAILY REELS RUN — 3 Reels per FB page/day for audience building.
  *
- * Strategy (per user decision):
- *   - Goal: build audience FIRST, sell later
- *   - 8 FB pages × 1 Reel/page/day = 8 Reels scheduled
- *   - Post time: 18:30 VN (peak engagement per research)
- *   - Source: rotated from reels-config.mjs (TikTok + Facebook creators)
+ * Schedule: 3 slots/day (VN time):
+ *   Slot 1 (sáng):  06:00 – 06:30
+ *   Slot 2 (trưa):  11:30 – 12:00
+ *   Slot 3 (chiều): 18:00 – 18:30
+ *
+ * Auto-detect: when run WITHOUT --schedule-at, picks the NEXT upcoming
+ * slot based on current VN time. If all 3 slots have passed today, picks
+ * slot 1 tomorrow morning.
  *
  * Usage:
- *   node src/daily-reels.mjs                          # schedule at 18:30 today (or tomorrow)
- *   node src/daily-reels.mjs --schedule-at 19:00      # custom post time
- *   node src/daily-reels.mjs --schedule-end 19:15     # custom window end
+ *   node src/daily-reels.mjs                          # auto-detect next slot
+ *   node src/daily-reels.mjs --schedule-at 19:00      # manual override
+ *   node src/daily-reels.mjs --schedule-end 19:15     # manual window end
  *   node src/daily-reels.mjs --skip-page shopee,tech  # skip specific pages
  *
- * Note: Shopee product reup (daily.mjs) stays intact for later use.
- * This orchestrator is separate — run it alongside or instead of daily.mjs
- * depending on your current growth phase.
+ * TikTok Tuệ Đàm is run separately (pipeline-quotes-veo.js).
+ * Shopee product reup (daily.mjs) stays intact for later use.
  */
 import "./env.js";
 import { spawn, execSync } from "child_process";
@@ -32,10 +34,53 @@ function arg(name, fallback = null) {
   return i >= 0 && i + 1 < args.length ? args[i + 1] : fallback;
 }
 
-// Default: post at 18:30 VN today. Window ends 18:45 (15 min for 8 pages).
-const SCHEDULE_AT = arg("--schedule-at", "18:30");
-const SCHEDULE_END = arg("--schedule-end", "18:45");
 const SKIP_PAGES = (arg("--skip-page", "") || "").split(",").filter(Boolean);
+
+// ── 3-slot schedule (VN time) ─────────────────────────────────────────────
+// Each slot: [startHH:MM, endHH:MM, label]
+const SLOTS = [
+  ["6:00",  "6:30",  "sáng"],
+  ["11:30", "12:00", "trưa"],
+  ["18:00", "18:30", "chiều"],
+];
+
+/**
+ * Auto-detect next upcoming slot. If --schedule-at is provided, use that
+ * instead (manual override). Returns { start, end, label }.
+ */
+function pickNextSlot() {
+  const manualAt = arg("--schedule-at");
+  if (manualAt) {
+    return {
+      start: manualAt,
+      end: arg("--schedule-end") || addMinutes(manualAt, 30),
+      label: "manual",
+    };
+  }
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  for (const [start, end, label] of SLOTS) {
+    const [sh, sm] = start.split(":").map(Number);
+    const slotMinutes = sh * 60 + (sm || 0);
+    // Pick this slot if it hasn't started yet (with 5-min grace for processing)
+    if (nowMinutes < slotMinutes - 5) {
+      return { start, end, label };
+    }
+  }
+  // All slots passed today → pick first slot tomorrow (sáng)
+  return { start: SLOTS[0][0], end: SLOTS[0][1], label: SLOTS[0][2] + " (mai)" };
+}
+
+function addMinutes(timeStr, mins) {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = h * 60 + (m || 0) + mins;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+const SLOT = pickNextSlot();
+const SCHEDULE_AT = SLOT.start;
+const SCHEDULE_END = SLOT.end;
 
 function minutesUntil(timeStr) {
   const [h, m] = timeStr.split(":").map(Number);
@@ -107,9 +152,9 @@ async function main() {
   const startTime = Date.now();
 
   log("╔══════════════════════════════════════════════════╗");
-  log("║        DAILY REELS — 8 FB Pages (1 Reel each)   ║");
+  log("║     DAILY REELS — 8 FB Pages (1 Reel each)      ║");
   log("╚══════════════════════════════════════════════════╝");
-  log(`📅 Schedule: ${SCHEDULE_AT}–${SCHEDULE_END} VN (base=+${baseDelay}m, stagger=${stagger.toFixed(1)}m)`);
+  log(`📅 Slot: ${SLOT.label} | ${SCHEDULE_AT}–${SCHEDULE_END} VN (base=+${baseDelay}m, stagger=${stagger.toFixed(1)}m)`);
   log(`📱 Pages: ${REEL_PAGES.join(", ")}`);
   log("");
 
