@@ -26,67 +26,114 @@
 
 /** @type {Record<string, Source[]>} */
 export const REELS_SOURCES = {
+  // ══════════════════════════════════════════════════════════════════════
+  // Sources updated 18/4/2026 — added high-frequency (daily+) posters
+  // to solve "0 new videos" issue. Prioritize TikTok aggregate channels
+  // and media companies that post 1-5x/day over individual KOLs (2-3x/week).
+  // ══════════════════════════════════════════════════════════════════════
+
   // ── shopee (Sưu Tầm Hàng Dị) — Đồ lạ, unique gadgets ──
   shopee: [
     { name: "Đồ Độc Lạ",       platform: "facebook", url: "https://www.facebook.com/profile.php?id=61576726414275" },
     { name: "Thánh Mẹo VN",    platform: "facebook", url: "https://www.facebook.com/thanhmeo.vn" },
     { name: "Mẹo Vặt",         platform: "facebook", url: "https://www.facebook.com/meohay" },
-    { name: "Duy Luân",        platform: "tiktok",   url: "https://www.tiktok.com/@duyluandethuong" },
+    { name: "Duy Luân",         platform: "tiktok",   url: "https://www.tiktok.com/@duyluandethuong" },
+    // ── NEW: high-frequency ──
+    { name: "HiisMe Store",     platform: "tiktok",   url: "https://www.tiktok.com/@hiisme.store" },       // daily, smart gadget compilations
+    { name: "Dương Dê Reviewer", platform: "tiktok",  url: "https://www.tiktok.com/@duongdeofficial" },    // daily, 2.4M, unboxing
+    { name: "Đạt Đung Đưa",    platform: "tiktok",   url: "https://www.tiktok.com/@datdungdua" },          // daily, gadget tips 659K
   ],
 
   // ── gia_dung (Đồ Gia Dụng) — smart home, utilities ──
   gia_dung: [
-    { name: "Gia Dụng TM Reels",        platform: "facebook", url: "https://www.facebook.com/giadungthongminh.reels" },
-    { name: "Smart Gadgets Tiện Ích",   platform: "facebook", url: "https://www.facebook.com/smartgadgets.tienichthongminh" },
-    { name: "Đồ Gia Dụng Thế Hệ Mới",   platform: "facebook", url: "https://www.facebook.com/smart.dogiadung.vn" },
+    { name: "Gia Dụng TM Reels",       platform: "facebook", url: "https://www.facebook.com/giadungthongminh.reels" },
+    { name: "Smart Gadgets Tiện Ích",  platform: "facebook", url: "https://www.facebook.com/smartgadgets.tienichthongminh" },
+    { name: "Đồ Gia Dụng Thế Hệ Mới", platform: "facebook", url: "https://www.facebook.com/smart.dogiadung.vn" },
+    // ── NEW: high-frequency TikTok ──
+    { name: "HiisMe Store",     platform: "tiktok",   url: "https://www.tiktok.com/@hiisme.store" },       // daily, kitchen gadgets #donhabep
+    { name: "BabyKopo Home",    platform: "tiktok",   url: "https://www.tiktok.com/@babykopohome" },       // daily, 6.7M, cooking+home hacks
+    { name: "Anh Vũ Trọc",     platform: "tiktok",   url: "https://www.tiktok.com/@vuvanduc.com" },       // daily, 1.6M, tech life hacks
+    { name: "Bách Hóa Xanh",   platform: "facebook", url: "https://www.facebook.com/bachhoaxanh" },       // daily, largest grocery chain VN
   ],
 
   // ── tech (Đồ Công Nghệ) — gadgets, phone, reviews ──
   tech: [
-    { name: "Anh Le Review",      platform: "tiktok",   url: "https://www.tiktok.com/@anhlereviewcongnghe" },
-    { name: "Long Khoa Học",      platform: "tiktok",   url: "https://www.tiktok.com/@longkhoahoc" },
+    { name: "Anh Le Review",     platform: "tiktok",   url: "https://www.tiktok.com/@anhlereviewcongnghe" },
+    { name: "Long Khoa Học",     platform: "tiktok",   url: "https://www.tiktok.com/@longkhoahoc" },
     { name: "Mẹo hay iOS Android", platform: "facebook", url: "https://www.facebook.com/meohayiosandroid" },
+    // ── NEW: high-frequency ──
+    { name: "Anh Vũ Trọc",      platform: "tiktok",   url: "https://www.tiktok.com/@vuvanduc.com" },      // daily 2x, 1.6M, #1 tech VN
+    { name: "Dương Dê Reviewer", platform: "tiktok",   url: "https://www.tiktok.com/@duongdeofficial" },   // daily, 2.4M, 3.93% engagement
+    { name: "Tuấn Tiền Tỉ",     platform: "tiktok",   url: "https://www.tiktok.com/@tuantienti2911" },    // daily, 1.1M, phone tricks
+    { name: "Kenh14",            platform: "facebook", url: "https://www.facebook.com/Kenh14" },            // multi/day, tech trending
   ],
 
   // ── sac_dep (Mỹ Phẩm) — skincare, beauty, makeup ──
   sac_dep: [
-    { name: "Võ Hà Linh",       platform: "tiktok",   url: "https://www.tiktok.com/@halinhofficial" },
-    { name: "Trinh Phạm",       platform: "tiktok",   url: "https://www.tiktok.com/@trinhpham2222" },
-    { name: "Chloe Nguyễn",     platform: "tiktok",   url: "https://www.tiktok.com/@bychloenguyen" },
-    { name: "Rư Skincare",      platform: "tiktok",   url: "https://www.tiktok.com/@goc.cua.ru" },
+    { name: "Võ Hà Linh",        platform: "tiktok",   url: "https://www.tiktok.com/@halinhofficial" },
+    { name: "Trinh Phạm",        platform: "tiktok",   url: "https://www.tiktok.com/@trinhpham2222" },
+    { name: "Chloe Nguyễn",      platform: "tiktok",   url: "https://www.tiktok.com/@bychloenguyen" },
+    { name: "Rư Skincare",       platform: "tiktok",   url: "https://www.tiktok.com/@goc.cua.ru" },
     { name: "Võ Hà Linh Beauty", platform: "facebook", url: "https://www.facebook.com/vohalinh.beauty" },
+    // ── NEW: high-frequency ──
+    { name: "Lê Khánh Huyền",    platform: "tiktok",   url: "https://www.tiktok.com/@lethikhanhhuyen2004" }, // daily+, 7.5M, #1 beauty VN
+    { name: "Cim Ngân",           platform: "tiktok",   url: "https://www.tiktok.com/@cimngan0503" },        // daily, 2.2M, 631K avg views
+    { name: "Vanmiu Beauty",     platform: "tiktok",   url: "https://www.tiktok.com/@vanmiu_beauty" },      // daily, 1.2M, pro makeup tutorials
+    { name: "Trần Oanh",         platform: "tiktok",   url: "https://www.tiktok.com/@tranoanh4451" },       // daily, 1.4M, skincare routines
+    { name: "ELLE Vietnam",      platform: "facebook", url: "https://www.facebook.com/ELLEVietnam" },       // daily+, editorial beauty Reels
   ],
 
   // ── thoi_trang (Thời Trang) — outfit, street style ──
   thoi_trang: [
-    { name: "Sơn Hồng Phạm",      platform: "tiktok", url: "https://www.tiktok.com/@sonhongpham" },
-    { name: "Hoàng Hải Hiền",     platform: "tiktok", url: "https://www.tiktok.com/@tikkaisweird" },
-    { name: "Phí Quỳnh Anh",      platform: "tiktok", url: "https://www.tiktok.com/@quynhanhshyn_" },
-    { name: "Nguyễn Phúc Anh",    platform: "tiktok", url: "https://www.tiktok.com/@phucanhh_" },
+    { name: "Sơn Hồng Phạm",     platform: "tiktok", url: "https://www.tiktok.com/@sonhongpham" },
+    { name: "Hoàng Hải Hiền",    platform: "tiktok", url: "https://www.tiktok.com/@tikkaisweird" },
+    { name: "Phí Quỳnh Anh",     platform: "tiktok", url: "https://www.tiktok.com/@quynhanhshyn_" },
+    { name: "Nguyễn Phúc Anh",   platform: "tiktok", url: "https://www.tiktok.com/@phucanhh_" },
+    // ── NEW: high-frequency ──
+    { name: "Đan Thy",           platform: "tiktok", url: "https://www.tiktok.com/@thybui.__" },           // daily+, 11M, 8.49% engagement!
+    { name: "Ngọc Matcha",       platform: "tiktok", url: "https://www.tiktok.com/@ngoc.matcha" },         // daily, 4.3M, OOTD aesthetics
+    { name: "BYB Academy VN",    platform: "tiktok", url: "https://www.tiktok.com/@bybacademyvn" },        // daily+, 2.2M, fashion education
+    { name: "ELLE Vietnam",      platform: "facebook", url: "https://www.facebook.com/ELLEVietnam" },      // daily, fashion editorial Reels
   ],
 
   // ── me_be (Mẹ & Bé) — parenting, baby products ──
   me_be: [
-    { name: "Fansie Family",   platform: "tiktok",   url: "https://www.tiktok.com/@befansie" },
-    { name: "Giang Chè Xíu Xôi", platform: "tiktok", url: "https://www.tiktok.com/@giangchekm" },
-    { name: "Salim Official",  platform: "tiktok",   url: "https://www.tiktok.com/@salim_official" },
-    { name: "Isis Min",        platform: "facebook", url: "https://www.facebook.com/isismin.vietnam" },
+    { name: "Fansie Family",      platform: "tiktok",   url: "https://www.tiktok.com/@befansie" },
+    { name: "Giang Chè Xíu Xôi", platform: "tiktok",   url: "https://www.tiktok.com/@giangchekm" },
+    { name: "Salim Official",     platform: "tiktok",   url: "https://www.tiktok.com/@salim_official" },
+    { name: "Isis Min",           platform: "facebook", url: "https://www.facebook.com/isismin.vietnam" },
+    // ── NEW: high-frequency ──
+    { name: "BabyKopo Home",     platform: "tiktok",   url: "https://www.tiktok.com/@babykopohome" },      // daily+, 6.7M, mom life + cooking
+    { name: "Xoài Fam (Trang Lou)", platform: "tiktok", url: "https://www.tiktok.com/@xoaifam" },          // daily, 797K, mom-baby lifestyle
+    { name: "Gia Đình Cam Cam",  platform: "tiktok",   url: "https://www.tiktok.com/@giadinhcamcam" },     // daily, 725K, family vlogs + tips
+    { name: "Nguyễn Vy Family",  platform: "tiktok",   url: "https://www.tiktok.com/@nguyenvy1234567" },   // daily, 1M, #1 family TikTok VN
   ],
 
   // ── the_thao (Thể Thao) — fitness, workout, outdoor ──
   the_thao: [
-    { name: "Anh Sơn Fitness",   platform: "tiktok",   url: "https://www.tiktok.com/@anhsonn_fitness" },
-    { name: "Minh Thơ Fitness",  platform: "tiktok",   url: "https://www.tiktok.com/@minhthofitness" },
-    { name: "Trịnh Khánh Linh",  platform: "tiktok",   url: "https://www.tiktok.com/@trinhkhanhlinh01" },
-    { name: "Đặng Kim Ba Yoga",  platform: "tiktok",   url: "https://www.tiktok.com/@dangkimba" },
+    { name: "Anh Sơn Fitness",    platform: "tiktok",   url: "https://www.tiktok.com/@anhsonn_fitness" },
+    { name: "Minh Thơ Fitness",   platform: "tiktok",   url: "https://www.tiktok.com/@minhthofitness" },
+    { name: "Trịnh Khánh Linh",   platform: "tiktok",   url: "https://www.tiktok.com/@trinhkhanhlinh01" },
+    { name: "Đặng Kim Ba Yoga",   platform: "tiktok",   url: "https://www.tiktok.com/@dangkimba" },
     { name: "California Fitness", platform: "facebook", url: "https://www.facebook.com/cfycvn" },
+    // ── NEW: high-frequency ──
+    { name: "Én Fitness",         platform: "tiktok",   url: "https://www.tiktok.com/@mc.hienvinh" },      // daily, 1.5M, 54.6M likes, transformation
+    { name: "Phan Bảo Long",     platform: "tiktok",   url: "https://www.tiktok.com/@phanbaolonglms" },    // daily, 1.2M, weight loss coaching
+    { name: "Ny Cơ Bắp",         platform: "tiktok",   url: "https://www.tiktok.com/@nynytran99" },        // daily, 570K, female bodybuilding
+    { name: "HitFit VN",         platform: "tiktok",   url: "https://www.tiktok.com/@hitfit.vn" },         // daily, 1.6M, group workout classes
   ],
 
   // ── bach_hoa (Bách Hóa Online) — general life hacks ──
   bach_hoa: [
-    { name: "Thánh Mẹo VN",        platform: "facebook", url: "https://www.facebook.com/thanhmeo.vn" },
-    { name: "Mẹo Vặt",             platform: "facebook", url: "https://www.facebook.com/meohay" },
-    { name: "Skincare Đúng Cách",  platform: "tiktok",   url: "https://www.tiktok.com/@skincaredungcach.byson" },
+    { name: "Thánh Mẹo VN",       platform: "facebook", url: "https://www.facebook.com/thanhmeo.vn" },
+    { name: "Mẹo Vặt",            platform: "facebook", url: "https://www.facebook.com/meohay" },
+    { name: "Skincare Đúng Cách", platform: "tiktok",   url: "https://www.tiktok.com/@skincaredungcach.byson" },
+    // ── NEW: high-frequency aggregate channels ──
+    { name: "60 Giây",            platform: "tiktok",   url: "https://www.tiktok.com/@60giay.com" },        // 5-10x/day!, 12.4M, media company
+    { name: "Theanh28",           platform: "tiktok",   url: "https://www.tiktok.com/@theanh28entertainment" }, // multi/day, 14.5M, viral content
+    { name: "Kenh14 Official",    platform: "tiktok",   url: "https://www.tiktok.com/@kenh14official" },     // multi/day, 9M, #1 youth media VN
+    { name: "Anh Vũ Trọc",       platform: "tiktok",   url: "https://www.tiktok.com/@vuvanduc.com" },      // daily, life hacks via tech angle
+    { name: "Kenh14 FB",          platform: "facebook", url: "https://www.facebook.com/Kenh14" },            // multi/day, Vietnam #1 youth media
   ],
 };
 
