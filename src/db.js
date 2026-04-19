@@ -89,6 +89,26 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_videos_niche_date   ON videos(niche, posted_at);
     CREATE INDEX IF NOT EXISTS idx_hashtag_niche       ON hashtag_pool(niche, active);
     CREATE INDEX IF NOT EXISTS idx_analytics_date      ON analytics_daily(date, niche);
+
+    CREATE TABLE IF NOT EXISTS posted_reels (
+      video_id       TEXT PRIMARY KEY,
+      source_url     TEXT NOT NULL,
+      source_name    TEXT,
+      page_name      TEXT NOT NULL,
+      niche          TEXT NOT NULL,
+      posted_at      TEXT NOT NULL,
+      scheduled_at   TEXT,
+      pfm_post_id    TEXT,
+      topic_score    REAL,
+      video_title    TEXT,
+      video_duration INTEGER,
+      file_size_mb   REAL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_posted_reels_page_date
+      ON posted_reels(page_name, posted_at);
+    CREATE INDEX IF NOT EXISTS idx_posted_reels_source
+      ON posted_reels(source_name);
   `);
 
   // --- Migrations ---
@@ -257,4 +277,51 @@ export function closeDb() {
     _db.close();
     _db = null;
   }
+}
+
+// --- posted_reels helpers (cross-page permanent blocklist) ---
+
+export function isVideoPosted(videoId) {
+  if (!videoId) return false;
+  const db = getDb();
+  return Boolean(
+    db.prepare("SELECT 1 FROM posted_reels WHERE video_id = ?").get(videoId)
+  );
+}
+
+export function recordPostedVideo(entry) {
+  if (!entry?.video_id || !entry?.page_name || !entry?.posted_at) {
+    throw new Error("recordPostedVideo: video_id, page_name, posted_at required");
+  }
+  const db = getDb();
+  db.prepare(`
+    INSERT OR IGNORE INTO posted_reels (
+      video_id, source_url, source_name, page_name, niche,
+      posted_at, scheduled_at, pfm_post_id, topic_score,
+      video_title, video_duration, file_size_mb
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    entry.video_id,
+    entry.source_url || "",
+    entry.source_name || null,
+    entry.page_name,
+    entry.niche || entry.page_name,
+    entry.posted_at,
+    entry.scheduled_at || null,
+    entry.pfm_post_id || null,
+    entry.topic_score ?? null,
+    entry.video_title?.slice(0, 200) || null,
+    entry.video_duration ?? null,
+    entry.file_size_mb ?? null
+  );
+}
+
+export function getPostedStats() {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT page_name, COUNT(*) AS n, MAX(posted_at) AS latest
+       FROM posted_reels GROUP BY page_name ORDER BY n DESC`
+    )
+    .all();
 }
