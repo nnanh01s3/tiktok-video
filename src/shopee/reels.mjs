@@ -359,11 +359,15 @@ if (!topic) {
   process.exit(1);
 }
 
-// Scrape + fallback through all sources if primary has no new videos
+// Scrape ALL sources for this niche (no early-stop cap). The inner candidate
+// loop classifier + size filters can reject many videos, so we need broad
+// coverage to guarantee each page has at least 1 on-topic candidate when
+// possible. Each source returns ≤5 videos (--playlist-end 5) so worst case
+// is ~50 candidates per page — still cheap (classifier calls are sequential,
+// early-break on first MAX success).
 const newVideos = [];
 const triedSources = [];
 for (let step = 0; step < SOURCES.length; step++) {
-  if (newVideos.length >= MAX * 5) break;
   const idx = (sourceIdx + step) % SOURCES.length;
   const src = SOURCES[idx];
   triedSources.push(idx);
@@ -372,17 +376,16 @@ for (let step = 0; step < SOURCES.length; step++) {
     ? await scrapeTikTok(src.url)
     : await scrapeFacebook(src.url);
 
+  let addedFromSource = 0;
   for (const v of videos) {
     if (!isVideoPosted(v.id)) {
       v._sourceIdx = idx;
       v._sourceName = src.name;
       newVideos.push(v);
-      // Collect extra candidates (up to 5x MAX) so we can skip short/broken
-      // videos and still hit the target number of posts
-      if (newVideos.length >= MAX * 5) break;
+      addedFromSource++;
     }
   }
-  if (newVideos.length > 0) log(`   ➕ [${idx}] +${videos.filter(v => !isVideoPosted(v.id)).length} new`);
+  if (addedFromSource > 0) log(`   ➕ [${idx}] +${addedFromSource} new`);
 }
 
 if (newVideos.length === 0) {
