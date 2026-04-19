@@ -86,11 +86,17 @@ function run(cmd, timeout = 60000) {
 
 // ── Step 1: Scrape latest video IDs from source ──────────────────────────
 /**
- * For TikTok profile URLs, use yt-dlp's --flat-playlist to get video URLs
- * without downloading. Fast, no auth required.
+ * Generic yt-dlp scraper for TikTok + YouTube profile URLs.
+ * yt-dlp's --flat-playlist returns video metadata without downloading,
+ * identical schema across both platforms. Fast, no auth required.
+ *
+ * URL patterns:
+ *   TikTok:  https://www.tiktok.com/@handle
+ *   YouTube: https://www.youtube.com/@handle/shorts   (Shorts only, 9:16 ready)
+ *            https://www.youtube.com/@handle/videos   (regular videos — will need crop)
  */
-async function scrapeTikTok(profileUrl) {
-  log(`🔍 Scrape TikTok: ${profileUrl}`);
+async function scrapeYtdlp(profileUrl, platformLabel = "TikTok") {
+  log(`🔍 Scrape ${platformLabel}: ${profileUrl}`);
   // --playlist-end 5 = only check 5 most recent videos (fast)
   const result = run(
     `"${YTDLP}" --flat-playlist --playlist-end 5 --no-warnings -j "${profileUrl}"`,
@@ -121,6 +127,9 @@ async function scrapeTikTok(profileUrl) {
   log(`   Found ${videos.length} videos`);
   return videos;
 }
+
+// Backward-compat alias — existing callers still work
+const scrapeTikTok = (url) => scrapeYtdlp(url, "TikTok");
 
 /**
  * For Facebook pages, reuse CDP scraper pattern from fb_repost.mjs.
@@ -372,9 +381,9 @@ for (let step = 0; step < SOURCES.length; step++) {
   const src = SOURCES[idx];
   triedSources.push(idx);
 
-  const videos = src.platform === "tiktok"
-    ? await scrapeTikTok(src.url)
-    : await scrapeFacebook(src.url);
+  const videos = src.platform === "facebook"
+    ? await scrapeFacebook(src.url)
+    : await scrapeYtdlp(src.url, src.platform === "youtube" ? "YouTube" : "TikTok");
 
   let addedFromSource = 0;
   for (const v of videos) {
