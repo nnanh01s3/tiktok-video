@@ -227,9 +227,12 @@ function downloadVideo(video) {
   );
   if (existsSync(outPath) && statSync(outPath).size > 100000) {
     const sizeMB = statSync(outPath).size / 1024 / 1024;
-    // Videos < 0.5MB are too short for FB Reels (causes "lỗi khi phát")
-    if (sizeMB < 0.5) {
-      log(`   ⏭️ Too small (${sizeMB.toFixed(1)}MB) — skipping short video`);
+    // Videos < 2.0MB have too-low bitrate for FB Reels to play stably:
+    // at 60s duration, 2MB ≈ 273 kbps (FB minimum for vertical 9:16 playback).
+    // Below this, player shows "Rất tiếc, đã xảy ra lỗi khi phát video này".
+    // Empirical: 0.6MB and 0.8MB videos confirmed failing 2026-04-19.
+    if (sizeMB < 2.0) {
+      log(`   ⏭️ Too small (${sizeMB.toFixed(1)}MB) — bitrate too low, FB would fail playback`);
       try { unlinkSync(outPath); } catch {}
       return null;
     }
