@@ -7,7 +7,8 @@
  *   3. Scrape latest video from source:
  *        - TikTok: yt-dlp with --flat-playlist for URL list
  *        - Facebook: CDP scraper (same pattern as fb_repost.mjs)
- *   4. Skip if already processed (per-page processed.json)
+ *   4. Skip if already in SQLite posted_reels (global, cross-page blocklist)
+ *      + classifier reject (Gemini Flash — title vs PAGES[page].topic)
  *   5. Download via yt-dlp
  *   6. FFmpeg: crop 9:16 (center), trim to ≤60s, remove TikTok watermark
  *      by cropping ~8% off the right side (where TT watermark sits)
@@ -32,6 +33,8 @@ import { join } from "path";
 import { createPoster } from "../social-poster.js";
 import { PAGES, BASE_DIR, FFMPEG } from "./config.mjs";
 import { REELS_SOURCES, pickSource } from "./reels-config.mjs";
+import { isVideoPosted, recordPostedVideo } from "../db.js";
+import { classifyRelevance } from "./reels-classifier.mjs";
 
 // ── CLI args ──────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -62,7 +65,6 @@ if (SOURCES.length === 0) {
 const YTDLP = "yt-dlp";
 const CHROME = process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const OUT_DIR = join(BASE_DIR, "reels", PAGE_ARG);
-const PROCESSED_FILE = join(OUT_DIR, "processed.json");
 const LOG_FILE = join(OUT_DIR, "reels.log");
 mkdirSync(OUT_DIR, { recursive: true });
 
@@ -74,15 +76,6 @@ function log(msg) {
     const prev = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf8") : "";
     writeFileSync(LOG_FILE, (prev + line + "\n").slice(-50_000));
   } catch {}
-}
-
-function loadProcessed() {
-  try { return JSON.parse(readFileSync(PROCESSED_FILE, "utf8")); }
-  catch { return { processed_ids: [], last_check: null }; }
-}
-
-function saveProcessed(data) {
-  writeFileSync(PROCESSED_FILE, JSON.stringify(data, null, 2));
 }
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -338,7 +331,7 @@ async function uploadAndPost(videoPath, caption, delayMin) {
   const result = await poster.scheduleFacebook({ mediaRef, caption, scheduledAt });
   const postId = result.postId || result.postIds?.[0];
   log(`   ✅ FB Scheduled: ${scheduledAt} | PostID: ${postId}`);
-  return postId;
+  return { postId, scheduledAt };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
@@ -353,8 +346,15 @@ const source = SOURCES[sourceIdx];
 log(`📌 Source [${sourceIdx}]: ${source.name} (${source.platform}) — ${source.url}`);
 log("=".repeat(60));
 
-const state = loadProcessed();
-log(`📋 Đã xử lý: ${state.processed_ids.length} videos`);
+log(`📋 Dedup: SQLite posted_reels (global, cross-page)`);
+
+// Topic description for this page — required for classifier.
+// PAGES is already imported at the top of the file from ./config.mjs.
+const topic = PAGES[PAGE_ARG]?.topic;
+if (!topic) {
+  log(`❌ No 'topic' defined for page '${PAGE_ARG}' in config.mjs PAGES — refusing to run`);
+  process.exit(1);
+}
 
 // Scrape + fallback through all sources if primary has no new videos
 const newVideos = [];
@@ -370,7 +370,7 @@ for (let step = 0; step < SOURCES.length; step++) {
     : await scrapeFacebook(src.url);
 
   for (const v of videos) {
-    if (!state.processed_ids.includes(v.id)) {
+    if (!isVideoPosted(v.id)) {
       v._sourceIdx = idx;
       v._sourceName = src.name;
       newVideos.push(v);
@@ -379,13 +379,11 @@ for (let step = 0; step < SOURCES.length; step++) {
       if (newVideos.length >= MAX * 5) break;
     }
   }
-  if (newVideos.length > 0) log(`   ➕ [${idx}] +${videos.filter(v => !state.processed_ids.includes(v.id)).length} new`);
+  if (newVideos.length > 0) log(`   ➕ [${idx}] +${videos.filter(v => !isVideoPosted(v.id)).length} new`);
 }
 
 if (newVideos.length === 0) {
   log(`✅ Không có video mới từ ${triedSources.length} sources thử được.`);
-  state.last_check = new Date().toISOString();
-  saveProcessed(state);
   process.exit(0);
 }
 
@@ -398,11 +396,37 @@ for (let i = 0; i < toProcess.length; i++) {
   if (success >= MAX) break;
   const video = toProcess[i];
   log(`\n[${success + 1}/${MAX}] ${video._sourceName} — ${video.id}`);
+
+  // ── Topic classifier gate (pre-download, skip off-topic) ──
+  let verdict;
+  try {
+    verdict = await classifyRelevance(
+      {
+        id: video.id,
+        title: video.title,
+        duration: video.duration,
+        source_name: video._sourceName,
+      },
+      topic
+    );
+  } catch (e) {
+    // classifyRelevance itself swallows errors, but belt-and-suspenders
+    log(`   ⚠ Classifier threw: ${e.message?.slice(0, 100)} — allow post`);
+    verdict = { match: true, score: 0.5, reason: "classifier exception" };
+  }
+
+  if (!verdict.match) {
+    log(`   ⏭️ Off-topic (score=${verdict.score.toFixed(2)}): ${verdict.reason}`);
+    // Do NOT record — other pages might accept this video
+    continue;
+  }
+  log(`   ✅ Topic match (score=${verdict.score.toFixed(2)})`);
+
   try {
     const raw = downloadVideo(video);
     if (!raw) {
       log("   ⏭️ Skip (download failed)");
-      state.processed_ids.push(video.id);
+      // No record — transient failure, retry next run
       continue;
     }
 
@@ -410,7 +434,6 @@ for (let i = 0; i < toProcess.length; i++) {
     const ok = processVideo(raw, processed);
     if (!ok) {
       log("   ⏭️ Skip (FFmpeg failed)");
-      state.processed_ids.push(video.id);
       try { unlinkSync(raw); } catch {}
       continue;
     }
@@ -418,11 +441,24 @@ for (let i = 0; i < toProcess.length; i++) {
     const caption = makeCaption(video.title, PAGE_ARG);
     log(`   📝 "${caption.slice(0, 80)}..."`);
 
-    await uploadAndPost(processed, caption, DELAY + i * 2);
-    state.processed_ids.push(video.id);
-    // Keep last 500 ids to prevent unbounded growth
-    state.processed_ids = state.processed_ids.slice(-500);
-    saveProcessed(state);
+    const { postId, scheduledAt } = await uploadAndPost(processed, caption, DELAY + i * 2);
+
+    // ── Record ONLY on successful upload ──
+    const sizeMB = Math.round((statSync(processed).size / 1024 / 1024) * 10) / 10;
+    recordPostedVideo({
+      video_id: video.id,
+      source_url: video.url,
+      source_name: video._sourceName,
+      page_name: PAGE_ARG,
+      niche: PAGE_ARG,
+      posted_at: new Date().toISOString(),
+      scheduled_at: scheduledAt,
+      pfm_post_id: postId,
+      topic_score: verdict.score,
+      video_title: video.title,
+      video_duration: video.duration,
+      file_size_mb: sizeMB,
+    });
     success++;
 
     // Cleanup
@@ -431,11 +467,9 @@ for (let i = 0; i < toProcess.length; i++) {
     if (i < toProcess.length - 1) await sleep(3000);
   } catch (e) {
     log(`   ❌ Error: ${e.message?.slice(0, 150)}`);
-    state.processed_ids.push(video.id);
+    // No record — transient failures should retry next run
   }
 }
 
-state.last_check = new Date().toISOString();
-saveProcessed(state);
 log("\n" + "=".repeat(60));
 log(`✅ Xong! Posted ${success}/${toProcess.length} Reels`);
