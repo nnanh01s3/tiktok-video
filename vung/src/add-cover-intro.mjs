@@ -21,11 +21,11 @@ const args = process.argv.slice(2);
 const tapArg = args.includes("--episode")
   ? args[args.indexOf("--episode") + 1]
   : null;
-// Default 5s — enough time for viewers to read title, identify characters,
-// and register the episode theme before video starts.
+// Default 3s — after A/B test user chose 3s over 5s: readable but doesn't
+// delay content. Better TikTok retention (viewers swipe fast if cover lingers).
 const duration = args.includes("--duration")
   ? parseFloat(args[args.indexOf("--duration") + 1])
-  : 5.0;
+  : 3.0;
 const replaceOriginal = args.includes("--replace"); // overwrite existing _final.mp4
 
 if (!tapArg) {
