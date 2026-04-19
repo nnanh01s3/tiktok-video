@@ -40,20 +40,23 @@ export const REELS_SOURCES = {
     { name: "Duy Luân",         platform: "tiktok",   url: "https://www.tiktok.com/@duyluandethuong" },
     // ── NEW: high-frequency ──
     { name: "HiisMe Store",     platform: "tiktok",   url: "https://www.tiktok.com/@hiisme.store" },       // daily, smart gadget compilations
-    { name: "Dương Dê Reviewer", platform: "tiktok",  url: "https://www.tiktok.com/@duongdeofficial" },    // daily, 2.4M, unboxing
     { name: "Đạt Đung Đưa",    platform: "tiktok",   url: "https://www.tiktok.com/@datdungdua" },          // daily, gadget tips 659K
   ],
 
-  // ── gia_dung (Đồ Gia Dụng) — smart home, utilities ──
+  // ── gia_dung (Đồ Gia Dụng) — kitchen, smart home, appliances ──
+  // Note 20/4/2026: removed BabyKopo Home (shifted to family/foodtour vlog)
+  // and Anh Vũ Trọc (tech creator, not gia_dung). Added 4 verified creators
+  // actually posting gia_dung content daily/weekly (research agent 20/4).
   gia_dung: [
-    { name: "Gia Dụng TM Reels",       platform: "facebook", url: "https://www.facebook.com/giadungthongminh.reels" },
-    { name: "Smart Gadgets Tiện Ích",  platform: "facebook", url: "https://www.facebook.com/smartgadgets.tienichthongminh" },
-    { name: "Đồ Gia Dụng Thế Hệ Mới", platform: "facebook", url: "https://www.facebook.com/smart.dogiadung.vn" },
-    // ── NEW: high-frequency TikTok ──
-    { name: "HiisMe Store",     platform: "tiktok",   url: "https://www.tiktok.com/@hiisme.store" },       // daily, kitchen gadgets #donhabep
-    { name: "BabyKopo Home",    platform: "tiktok",   url: "https://www.tiktok.com/@babykopohome" },       // daily, 6.7M, cooking+home hacks
-    { name: "Anh Vũ Trọc",     platform: "tiktok",   url: "https://www.tiktok.com/@vuvanduc.com" },       // daily, 1.6M, tech life hacks
-    { name: "Bách Hóa Xanh",   platform: "facebook", url: "https://www.facebook.com/bachhoaxanh" },       // daily, largest grocery chain VN
+    { name: "Điện Máy Quang Hạnh",    platform: "tiktok",   url: "https://www.tiktok.com/@dienmayquanghanh" },        // daily 2-3x, retail showroom (Philips, Seka, Hatari, bếp từ, máy xay)
+    { name: "Nhà Xanh Gia Dụng",      platform: "tiktok",   url: "https://www.tiktok.com/@giadungxanh_giadinhviet" }, // burst 5-10/2-3 days, smart home gadgets (#dogiadungtienich)
+    { name: "Mê đồ gia dụng tiện ích", platform: "tiktok",   url: "https://www.tiktok.com/@medogiadungtienich6" },     // 2-3x/week, home decor + kitchen accessories
+    { name: "Long Khoa Học",           platform: "tiktok",   url: "https://www.tiktok.com/@longkhoahoc" },             // 2-3x/week, smart home tech (EZVIZ, Dyson, Panasonic)
+    { name: "HiisMe Store",            platform: "tiktok",   url: "https://www.tiktok.com/@hiisme.store" },            // daily, kitchen gadgets #donhabep (may have short clips)
+    { name: "Gia Dụng TM Reels",       platform: "facebook", url: "https://www.facebook.com/giadungthongminh.reels" }, // FB fallback — verify activity periodically
+    { name: "Smart Gadgets Tiện Ích",  platform: "facebook", url: "https://www.facebook.com/smartgadgets.tienichthongminh" }, // FB fallback
+    { name: "Đồ Gia Dụng Thế Hệ Mới",  platform: "facebook", url: "https://www.facebook.com/smart.dogiadung.vn" },     // FB fallback
+    { name: "Bách Hóa Xanh",           platform: "facebook", url: "https://www.facebook.com/bachhoaxanh" },            // FB fallback — grocery chain
   ],
 
   // ── tech (Đồ Công Nghệ) — gadgets, phone, reviews ──
@@ -63,8 +66,9 @@ export const REELS_SOURCES = {
     { name: "Mẹo hay iOS Android", platform: "facebook", url: "https://www.facebook.com/meohayiosandroid" },
     // ── NEW: high-frequency ──
     { name: "Anh Vũ Trọc",      platform: "tiktok",   url: "https://www.tiktok.com/@vuvanduc.com" },      // daily 2x, 1.6M, #1 tech VN
-    { name: "Dương Dê Reviewer", platform: "tiktok",   url: "https://www.tiktok.com/@duongdeofficial" },   // daily, 2.4M, 3.93% engagement
     { name: "Tuấn Tiền Tỉ",     platform: "tiktok",   url: "https://www.tiktok.com/@tuantienti2911" },    // daily, 1.1M, phone tricks
+    { name: "Schannel",          platform: "tiktok",   url: "https://www.tiktok.com/@schannelvn" },        // daily, 3M, CellphoneS tech media, high engagement
+    { name: "Di Động Việt",    platform: "tiktok",   url: "https://www.tiktok.com/@didongviet_official" }, // daily, phone retailer reviews
     { name: "Kenh14",            platform: "facebook", url: "https://www.facebook.com/Kenh14" },            // multi/day, tech trending
   ],
 
