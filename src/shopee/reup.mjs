@@ -24,7 +24,6 @@ import {
 import { join } from "path";
 import { genCaptionAI, genCaptionFallback } from "./caption.mjs";
 import { ShopeeAffiliate, closeCdpBrowser } from "./affiliate.mjs";
-import { shortenUrl } from "./shorten_url.mjs";
 import { getShortLinkFromCsv } from "./short_link_lookup.mjs";
 import { PAGES, FFMPEG, FONT, BASE_DIR, MAX_PER_DAY, MAX_PER_RUN } from "./config.mjs";
 
@@ -262,22 +261,16 @@ async function processVideo(rawPath, product) {
 import { createPoster } from "../social-poster.js";
 const poster = createPoster(PAGE);
 
-async function appendAffLink(caption, product) {
-  if (!product?.affiliateLink) return caption;
-  // Prefer official Shopee short link from CSV lookup (s.shopee.vn/xxx).
-  // CSVs are exported manually from affiliate.shopee.vn dashboard via
-  // "Lấy link" button → dropped into D:/tiktok/ (see short_link_lookup.mjs).
-  // Benefits vs is.gd: trusted domain, embedded commission tracking,
-  // less likely to be flagged as spam by FB/TikTok.
-  let shortLink = getShortLinkFromCsv(product.itemId);
-  if (shortLink) {
-    log(`   🔗 CSV short link: ${shortLink}`);
-  } else {
-    // Fallback: is.gd if product not in any loaded CSV (e.g. freshly
-    // discovered product user hasn't exported yet).
-    shortLink = await shortenUrl(product.affiliateLink);
-    log(`   🔗 is.gd fallback: ${shortLink}`);
+function appendAffLink(caption, product) {
+  // Strict policy: only post products that have an official Shopee short link
+  // from the CSV export. The upfront partition at main flow ensures any
+  // product reaching here has a valid CSV link. If for some reason the CSV
+  // map changed between partition and post, we throw — fail loud.
+  const shortLink = getShortLinkFromCsv(product.itemId);
+  if (!shortLink) {
+    throw new Error(`Missing CSV short link for item ${product.itemId} — should have been filtered upfront`);
   }
+  log(`   🔗 CSV short link: ${shortLink}`);
   return `${caption}\n\n🛒 Mua ngay: ${shortLink}`;
 }
 
@@ -285,7 +278,7 @@ async function postVideo(videoPath, caption, product, slotIdx) {
   const mediaRef = await poster.upload(videoPath);
   log(`   ✅ Uploaded: ${mediaRef.slice(0, 60)}`);
 
-  const captionWithLink = await appendAffLink(caption, product);
+  const captionWithLink = appendAffLink(caption, product);
   const delay = BASE_DELAY + slotIdx * POST_INTERVAL;
   const scheduledAt = new Date(Date.now() + delay * 60_000).toISOString().replace(/\.\d{3}Z$/, ".000Z");
   const results = {};
@@ -313,10 +306,9 @@ async function postVideo(videoPath, caption, product, slotIdx) {
 
   // Affiliate comment (PostFast only, 60 min after post)
   if (PAGE.postComments && product?.affiliateLink && results.fbPostId) {
-    // Same strategy as caption: prefer CSV lookup, fallback to is.gd
-    const shortLink =
-      getShortLinkFromCsv(product.itemId) ||
-      (await shortenUrl(product.affiliateLink));
+    // CSV-only: comment mirrors caption policy (no is.gd fallback)
+    const shortLink = getShortLinkFromCsv(product.itemId);
+    if (!shortLink) return results;  // skip comment if no CSV link (shouldn't happen — partitioned upfront)
     const comment = `MUA NGAY TẠI ĐÂY👇👇👇\n${shortLink}\n${shortLink}`;
     const commentDelay = 60 * 60_000;
     const timer = setTimeout(async () => {
@@ -359,8 +351,38 @@ if (!products.length) {
   process.exit(0);
 }
 
-const toProcess = products.slice(0, slot);
-log(`📌 Xử lý ${toProcess.length} sản phẩm\n`);
+// ── CSV-link partition ────────────────────────────────────────────────────
+// Strict policy: only post products with official s.shopee.vn/xxx link from
+// CSV export (affiliate.shopee.vn → "Lấy link" → export CSV into D:/tiktok/).
+// Products without CSV link are skipped and reported at end of run so user
+// knows exactly which items to export.
+const withLink = [];
+const withoutLink = [];
+for (const p of products) {
+  if (getShortLinkFromCsv(p.itemId)) {
+    withLink.push(p);
+  } else {
+    withoutLink.push(p);
+  }
+}
+
+if (withoutLink.length > 0) {
+  log(`⚠️ ${withoutLink.length}/${products.length} sản phẩm CHƯA có CSV short link — sẽ skip:`);
+  for (const p of withoutLink) {
+    log(`   ⏭️  ${p.itemId} "${(p.name || "").slice(0, 60)}"`);
+  }
+}
+
+if (!withLink.length) {
+  log(`\n❌ 0 sản phẩm có CSV short link → không post được gì.`);
+  log(`   Hãy vào affiliate.shopee.vn → "Lấy link" cho các sản phẩm trên → export CSV vào D:/tiktok/`);
+  state.last_check = new Date().toISOString();
+  saveState(state);
+  process.exit(0);
+}
+
+const toProcess = withLink.slice(0, slot);
+log(`📌 Xử lý ${toProcess.length}/${withLink.length} sản phẩm có CSV link\n`);
 
 // Check if page has a valid posting account configured
 if (!poster.getFacebookId() && !poster.getTikTokId()) {
@@ -429,6 +451,22 @@ saveState(state);
 log("\n" + "=".repeat(60));
 log(`✅ Đăng ${success}/${toProcess.length} video | Page: ${PAGE.name}`);
 log(`📊 Tổng hôm nay: ${doneToday + success}/${MAX_PER_DAY}`);
+
+// Final reminder: repeat missing CSV list if any (easy to see at bottom)
+if (withoutLink.length > 0) {
+  log("");
+  log("─".repeat(60));
+  log(`⚠️  NHẮC NHỞ: ${withoutLink.length} sản phẩm cần xuất CSV link:`);
+  for (const p of withoutLink) {
+    log(`   - ${p.itemId}  "${(p.name || "").slice(0, 60)}"`);
+  }
+  log(`Bước kế tiếp:`);
+  log(`  1. Truy cập https://affiliate.shopee.vn`);
+  log(`  2. Tìm từng itemId trên → nhấn "Lấy link" → đưa vào danh sách`);
+  log(`  3. Export CSV → drop vào D:/tiktok/ (file tên link_san_pham_shopee_*.csv)`);
+  log(`  4. Rerun: node src/shopee/reup.mjs --page ${pageArg}`);
+  log("─".repeat(60));
+}
 
 // Cleanup raw files > 3 days
 const cutoff = Date.now() - 3 * 24 * 3600_000;
