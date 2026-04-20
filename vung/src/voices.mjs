@@ -114,6 +114,8 @@ const CHARACTER_ALIASES = {
   "vo / chim đưa tin": "narrator",
   "thỏ rừng": "thỏ rừng",
   "chim phụ": "chim",
+  "nhím phụ": "sóc phụ",
+  "thỏ phụ nhỏ": "sóc phụ",
 };
 
 /**
