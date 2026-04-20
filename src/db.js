@@ -325,3 +325,25 @@ export function getPostedStats() {
     )
     .all();
 }
+
+/**
+ * Return Set of source_names used in last N posts for a page.
+ * Used by soft rotation in reels.mjs — candidates from recent sources
+ * are deprioritized (not banned) so diversity emerges naturally.
+ * Excludes 'legacy_migration' entries (which have no useful source info).
+ */
+export function getRecentSourceNames(pageName, limit = 5) {
+  if (!pageName) return new Set();
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT source_name FROM posted_reels
+       WHERE page_name = ?
+         AND source_name IS NOT NULL
+         AND source_name != 'legacy_migration'
+       ORDER BY posted_at DESC
+       LIMIT ?`
+    )
+    .all(pageName, limit);
+  return new Set(rows.map((r) => r.source_name));
+}

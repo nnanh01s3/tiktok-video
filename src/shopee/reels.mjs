@@ -33,7 +33,7 @@ import { join } from "path";
 import { createPoster } from "../social-poster.js";
 import { PAGES, BASE_DIR, FFMPEG } from "./config.mjs";
 import { REELS_SOURCES, pickSource } from "./reels-config.mjs";
-import { isVideoPosted, recordPostedVideo } from "../db.js";
+import { isVideoPosted, recordPostedVideo, getRecentSourceNames } from "../db.js";
 import { classifyRelevance } from "./reels-classifier.mjs";
 
 // ── CLI args ──────────────────────────────────────────────────────────────
@@ -400,6 +400,27 @@ for (let step = 0; step < SOURCES.length; step++) {
 if (newVideos.length === 0) {
   log(`✅ Không có video mới từ ${triedSources.length} sources thử được.`);
   process.exit(0);
+}
+
+// ── Soft rotation: deprioritize sources used in last 5 posts ──
+// Does NOT reject candidates — just reorders so less-recent sources are
+// evaluated by the classifier first. If fresh sources have on-topic
+// content, they'll win. If only recent sources have on-topic content,
+// they still get their chance after fresh ones are exhausted.
+// Sort is stable (V8 since 2019) so within each group (fresh vs recent)
+// the scrape order is preserved — this keeps primary-source-first
+// semantics as a secondary tiebreaker.
+const recentSources = getRecentSourceNames(PAGE_ARG, 5);
+if (recentSources.size > 0) {
+  log(`   🔄 Recent sources (last 5): ${[...recentSources].join(", ")}`);
+  newVideos.sort((a, b) => {
+    const aRecent = recentSources.has(a._sourceName);
+    const bRecent = recentSources.has(b._sourceName);
+    if (aRecent === bRecent) return 0;
+    return aRecent ? 1 : -1; // fresh (false) → 0, recent (true) → 1 → back
+  });
+  const freshCount = newVideos.filter((v) => !recentSources.has(v._sourceName)).length;
+  log(`   🔄 Reorder: ${freshCount} fresh-source candidates first, ${newVideos.length - freshCount} recent-source last`);
 }
 
 // Try all candidates, stop when we've posted MAX successfully
