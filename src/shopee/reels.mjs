@@ -453,6 +453,18 @@ for (let i = 0; i < toProcess.length; i++) {
       continue;
     }
 
+    // Post-FFmpeg size check: FFmpeg can both balloon (low-res raw →
+    // high-quality encode) AND shrink (static content compresses hard)
+    // the output. We must re-check output size even if raw passed the
+    // initial filter. <2MB post-FFmpeg = low bitrate = FB player fails.
+    const processedMB = statSync(processed).size / 1024 / 1024;
+    if (processedMB < 2.0) {
+      log(`   ⏭️ Post-FFmpeg too small (${processedMB.toFixed(1)}MB) — bitrate too low for FB`);
+      try { unlinkSync(raw); } catch {}
+      try { unlinkSync(processed); } catch {}
+      continue;
+    }
+
     const caption = makeCaption(video.title, PAGE_ARG);
     log(`   📝 "${caption.slice(0, 80)}..."`);
 
