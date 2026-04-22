@@ -112,6 +112,7 @@ const CHARACTER_ALIASES = {
   "sóc": "sóc phụ",
   "sóc con": "sóc phụ",
   "vo / chim đưa tin": "narrator",
+  "vo phụ": "narrator",
   "thỏ rừng": "thỏ rừng",
   "chim phụ": "chim",
   "nhím phụ": "sóc phụ",
