@@ -114,17 +114,25 @@ export const REELS_SOURCES = {
   ],
 
   // ── the_thao (Thể Thao) — fitness, workout, outdoor ──
+  // Note 23/4/2026: removed Minh Thơ Fitness (100% raw <2MB), Én Fitness
+  // (shifted to chứng khoán), Ny Cơ Bắp (vlog cá nhân). Added 6 verified
+  // creators from research agent 23/4 — pro-studio production, higher
+  // bitrate confidence (@shredan72 787kbps, @trantrungnhantnt 1.77Mbps).
   the_thao: [
-    { name: "Anh Sơn Fitness",    platform: "tiktok",   url: "https://www.tiktok.com/@anhsonn_fitness" },
-    { name: "Minh Thơ Fitness",   platform: "tiktok",   url: "https://www.tiktok.com/@minhthofitness" },
-    { name: "Trịnh Khánh Linh",   platform: "tiktok",   url: "https://www.tiktok.com/@trinhkhanhlinh01" },
-    { name: "Đặng Kim Ba Yoga",   platform: "tiktok",   url: "https://www.tiktok.com/@dangkimba" },
-    { name: "California Fitness", platform: "facebook", url: "https://www.facebook.com/cfycvn" },
-    // ── NEW: high-frequency ──
-    { name: "Én Fitness",         platform: "tiktok",   url: "https://www.tiktok.com/@mc.hienvinh" },      // daily, 1.5M, 54.6M likes, transformation
-    { name: "Phan Bảo Long",     platform: "tiktok",   url: "https://www.tiktok.com/@phanbaolonglms" },    // daily, 1.2M, weight loss coaching
-    { name: "Ny Cơ Bắp",         platform: "tiktok",   url: "https://www.tiktok.com/@nynytran99" },        // daily, 570K, female bodybuilding
-    { name: "HitFit VN",         platform: "tiktok",   url: "https://www.tiktok.com/@hitfit.vn" },         // daily, 1.6M, group workout classes
+    // ── NEW (23/4): high-bitrate pro-studio ──
+    { name: "FitStrength Academy",  platform: "tiktok",   url: "https://www.tiktok.com/@trantrungnhantnt" }, // 8x/week, PT academy, ~1.77 Mbps bitrate (best)
+    { name: "An Nguyen Fitness",    platform: "tiktok",   url: "https://www.tiktok.com/@shredan72" },        // 4x/week, giảm mỡ/cắt cơ coaching, ~787 kbps
+    { name: "Cường Nguyễn Fitness", platform: "tiktok",   url: "https://www.tiktok.com/@cuongnguyenfitness" }, // 10x/week, PT coaching Q&A studio
+    { name: "Đinh Huỳnh Duy Anh",  platform: "tiktok",   url: "https://www.tiktok.com/@fboxda" },           // 15x/week, gym lifestyle + form demos
+    { name: "PhillipSu",             platform: "tiktok",   url: "https://www.tiktok.com/@phillsu" },          // 1x/week, bodybuilding DFYNE sponsored
+    { name: "nammy (namlifts)",      platform: "tiktok",   url: "https://www.tiktok.com/@namlifts" },         // 3-4x/week, transformation (bitrate borderline)
+    // ── kept: still passable ──
+    { name: "Anh Sơn Fitness",       platform: "tiktok",   url: "https://www.tiktok.com/@anhsonn_fitness" },
+    { name: "Trịnh Khánh Linh",     platform: "tiktok",   url: "https://www.tiktok.com/@trinhkhanhlinh01" },
+    { name: "Đặng Kim Ba Yoga",     platform: "tiktok",   url: "https://www.tiktok.com/@dangkimba" },
+    { name: "Phan Bảo Long",        platform: "tiktok",   url: "https://www.tiktok.com/@phanbaolonglms" },   // weight loss coaching
+    { name: "HitFit VN",             platform: "tiktok",   url: "https://www.tiktok.com/@hitfit.vn" },        // group workout classes
+    { name: "California Fitness",    platform: "facebook", url: "https://www.facebook.com/cfycvn" },
   ],
 
   // ── bach_hoa (Bách Hóa Online) — general life hacks ──
