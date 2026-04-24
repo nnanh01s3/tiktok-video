@@ -86,6 +86,14 @@ export const CHARACTERS = {
     visualPrompt: "a small cute rabbit, white and brown fur, long ears, energetic",
     negativePrompt: null,
   },
+  "người bán": {
+    name: "Người bán",
+    role: "weasel-seller",
+    voice: "Kore", // Firm, informative — salesman pitch
+    style: "Speak confident, smooth salesman tone, slightly pitchy and persuasive, Southern Vietnamese.",
+    visualPrompt: "a slick weasel shopkeeper, sleek brown fur with cream belly, long slim body, sly confident smile, wearing a small green apron and a leaf-shaped name tag, cheerful salesman pose",
+    negativePrompt: "human, person, realistic, scary, dark, low quality",
+  },
 };
 
 /**
