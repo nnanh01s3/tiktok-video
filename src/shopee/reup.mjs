@@ -402,7 +402,7 @@ for (let i = 0; i < toProcess.length; i++) {
   log(`   💰 ${p.commissionRate}% | ${p.price?.toLocaleString("vi")}đ | Bán: ${p.sold}`);
 
   state.processed_ids = [...state.processed_ids, p.itemId].slice(-500);
-  state.used_shopee_ids = [...state.used_shopee_ids, p.itemId].slice(-500);
+  state.used_shopee_ids = [...new Set([...state.used_shopee_ids, p.itemId])];  // lifetime per-page dedup, never truncate
   saveState(state);
 
   try {
