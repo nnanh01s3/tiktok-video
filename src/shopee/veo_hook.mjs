@@ -375,3 +375,58 @@ export async function composeVideo({ veoClip, images, voiceover, product, output
   log(`   [veo-hook] composed ${(statSync(outputPath).size / 1024 / 1024).toFixed(1)}MB → ${outputPath}`);
   return { path: outputPath };
 }
+
+/**
+ * Single entry point: generate a 60-70s MP4 from a product's images.
+ *
+ * @param {Object} product   - parsed Shopee product (must include _raw or product.image)
+ * @param {string} outputPath
+ * @param {Object} opts
+ * @param {string} [opts.style="urgent"]
+ * @param {boolean} [opts.mockVeo=false]
+ * @param {Function} [opts.log=console.log]
+ * @param {boolean} [opts.cleanup=true]
+ * @returns {Promise<{path: string, veoTier: string|null, duration: number}>}
+ */
+export async function generateVeoHookVideo(product, outputPath, opts = {}) {
+  const log = opts.log || console.log;
+  const style = opts.style || "urgent";
+  const workDir = join(dirname(outputPath), `veo_hook_${product.itemId}`);
+
+  log(`\n🎬 [veo-hook] start: ${product.itemId} "${(product.name || "").slice(0, 40)}"`);
+
+  // Step 1: images
+  const images = await prepareImages(product, workDir, log);
+
+  // Step 2: scripts
+  const { veoHookPrompt, voiceoverScript } = await generateScripts(product, style, log);
+
+  // Step 3: Veo (or fallback)
+  const hookOut = join(workDir, "hook.mp4");
+  const veoResult = await generateHookClip(veoHookPrompt, images[0], hookOut, { ...opts, log });
+  const veoClip = veoResult.path || null;
+  const veoTier = veoResult.model || null;
+
+  // Step 4: TTS
+  const voPath = join(workDir, "vo.mp3");
+  const voResult = await generateVoiceover(voiceoverScript, style, voPath, { log });
+  const voiceover = voResult.path;
+
+  // Step 5: compose
+  await composeVideo({ veoClip, images, voiceover, product, outputPath, log });
+
+  // Step 6: cleanup intermediates (keep final output)
+  if (opts.cleanup !== false) {
+    try {
+      run(`rmdir /s /q "${workDir.replace(/\//g, "\\")}" 2>nul`, 5_000);
+    } catch {}
+  }
+
+  // Detect duration
+  const ffprobePath = FFMPEG.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
+  const probe = run(`"${ffprobePath}" -v error -show_entries format=duration -of csv=p=0 "${outputPath}"`, 10_000);
+  const duration = parseFloat((probe.stdout || "0").trim()) || 60;
+
+  log(`✅ [veo-hook] done: ${duration.toFixed(1)}s, tier=${veoTier || "kenburns"}`);
+  return { path: outputPath, veoTier, duration };
+}
