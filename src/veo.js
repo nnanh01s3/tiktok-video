@@ -16,7 +16,7 @@
  *   - veo-3.1-generate-preview: Best quality + native audio ("premium")
  *
  * Cost per 8s video: Veo 2.0 ~free, Veo 3.0-fast ~$1.20, Veo 3.1 ~$3.20
- * Rate limits: 2 uses/model/day. Videos retained 2 days.
+ * Rate limits: fast 10/day, standard 3/day, premium 2/day. Videos retained 2 days.
  */
 import { GoogleGenAI } from "@google/genai";
 import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs";
@@ -122,12 +122,17 @@ export async function generateVideo(prompt, outputPath, options = {}) {
   // Both Veo 2.0 and Veo 3.x accept this via the GenAI SDK.
   const apiPayload = { model, prompt, config };
   if (options.image) {
+    if (!existsSync(options.image)) {
+      throw new Error(`[Veo] Image not found: ${options.image}`);
+    }
     const imgBytes = readFileSync(options.image);
     const lower = options.image.toLowerCase();
-    const ext = lower.endsWith(".png") ? "png" : "jpeg";
+    const extMap = { ".png": "png", ".webp": "webp", ".jpg": "jpeg", ".jpeg": "jpeg" };
+    const rawExt = lower.match(/\.[^.]+$/)?.[0] ?? "";
+    const mimeSubtype = extMap[rawExt] ?? "jpeg";
     apiPayload.image = {
       imageBytes: imgBytes.toString("base64"),
-      mimeType: `image/${ext}`,
+      mimeType: `image/${mimeSubtype}`,
     };
     console.log(`[Veo] Reference image: ${options.image}`);
   }
