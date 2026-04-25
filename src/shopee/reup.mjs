@@ -105,53 +105,25 @@ async function discoverProducts(usedIds) {
     log("ℹ️  Chưa có Shopee Affiliate cookies");
     return [];
   }
-
   try {
     const opts = {
+      strategy: PAGE.strategy || "random",
       categoriesPerRun: 4,
-      productsPerCat: 4,
+      productsPerCat: PAGE.strategy === "bestseller" ? Math.max(3, MAX_PER_RUN) : 4,
       minCommission: 0,
-      videoOnly: true,
+      videoOnly: PAGE.strategy === "bestseller" ? false : true,
       log,
     };
-
-    // Filter by category — PAGE.categories has { catids, matchIds }
-    // catids: filter products from cache by product catid
-    // matchIds: filter API queries (when API works)
     if (PAGE.categories) {
       opts.categoryIds = PAGE.categories.matchIds || PAGE.categories;
       opts.catidFilter = PAGE.categories.catids || null;
     }
-
     const products = await shopeeAff.discoverProducts(usedIds, opts);
     if (products.length > 0) {
-      log(`   💰 ${products.length} sản phẩm có video + commission`);
+      log(`   💰 ${products.length} sản phẩm (${PAGE.strategy === "bestseller" ? "bestseller" : "random"})`);
       return products;
     }
-
-    // Fallback 1: same category without videoOnly filter
-    opts.videoOnly = false;
-    const all = await shopeeAff.discoverProducts(usedIds, opts);
-    const withVideo = all.filter(p => p.hasVideo);
-    if (withVideo.length > 0) {
-      log(`   ✅ Tìm thêm ${withVideo.length} SP có video (no videoOnly filter)`);
-      return withVideo;
-    }
-
-    // Fallback 2: no category filter (random products) — better than 0
-    if (PAGE.categories) {
-      log("   ⚠️ Không có SP cho category này, thử random...");
-      const randomProducts = await shopeeAff.discoverProducts(usedIds, {
-        categoriesPerRun: 4, productsPerCat: 4,
-        minCommission: 0, videoOnly: true, log,
-      });
-      if (randomProducts.length > 0) {
-        log(`   ✅ Fallback: ${randomProducts.length} SP random có video`);
-        return randomProducts;
-      }
-    }
-
-    log("   ⚠️ Không có SP nào có video");
+    log("   ⚠️ Không tìm thấy sản phẩm phù hợp");
   } catch (e) {
     log(`   ❌ Affiliate API lỗi: ${e.message?.slice(0, 80)}`);
   }
@@ -421,11 +393,31 @@ for (let i = 0; i < toProcess.length; i++) {
   saveState(state);
 
   try {
-    const raw = await downloadVideo(p);
-    if (!raw) continue;
+    let processed;
+    let isVeoHook = false;
+    let veoTier = null;
 
-    const processed = await processVideo(raw, p);
-    if (!processed) continue;
+    if (p.hasVideo && p.videoUrl) {
+      // Existing flow: download + FFmpeg
+      const raw = await downloadVideo(p);
+      if (!raw) continue;
+      processed = await processVideo(raw, p);
+      if (!processed) continue;
+    } else {
+      // New flow: Veo hook from product images
+      const { generateVeoHookVideo } = await import("./veo_hook.mjs");
+      const hookOut = join(OUTPUT_DIR, `${p.itemId}_hook.mp4`);
+      const cfg = PAGE.veoHookConfig || { style: "urgent", targetDuration: 60 };
+      try {
+        const r = await generateVeoHookVideo(p, hookOut, { style: cfg.style, log });
+        processed = r.path;
+        veoTier = r.veoTier;
+        isVeoHook = true;
+      } catch (e) {
+        log(`   ❌ Veo hook failed: ${e.message?.slice(0, 120)} — skip`);
+        continue;
+      }
+    }
 
     const { platform, niche, pageName } = PAGE.caption;
     const caption =
@@ -433,19 +425,17 @@ for (let i = 0; i < toProcess.length; i++) {
       || genCaptionFallback(p.name, pageName, niche);
     log(`   📝 "${caption.slice(0, 80)}..."`);
 
-    // slotIdx is RELATIVE to this run (0, 1) — not cumulative across all
-    // runs today. Passing `doneToday + success` was the legacy "spread
-    // across day" behavior where morning videos used slots 0,1 and
-    // afternoon used slots 2,3 etc. That conflicts with the "post within
-    // 15 min per run" requirement — cumulative offset pushes afternoon
-    // delays past the 15-min window. Fix: use `success` alone (0 or 1).
     const result = await postVideo(processed, caption, p, success);
+    result.isVeoHook = isVeoHook;
+    result.veoTier = veoTier;
 
     state.posts_today.push({
       ...result,
       shopeeItemId: p.itemId,
       productName: p.name?.slice(0, 100),
       affiliateLink: p.affiliateLink || null,
+      isVeoHook,
+      veoTier,
       at: new Date().toISOString(),
     });
     saveState(state);

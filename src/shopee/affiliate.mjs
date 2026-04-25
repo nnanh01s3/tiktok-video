@@ -342,6 +342,7 @@ function parseProduct(item, categoryName = "") {
     videoThumb,       // Thumbnail URL
     hasVideo: !!videoUrl,
     source: "shopee_affiliate_dashboard",
+    _raw: item,  // for veo_hook image extraction
   };
 }
 
