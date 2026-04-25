@@ -25,19 +25,24 @@ import { dirname } from "path";
 const POLL_INTERVAL_MS = 10_000; // 10 seconds between status checks
 const MAX_POLL_ATTEMPTS = 60;    // 10 minutes max wait
 const MAX_USES_PER_MODEL = {
-  fast: 10,      // Veo 2.0 free tier — bumped 2 → 10 for shopee hook flow
+  fast: 10,      // Veo 2.0 free tier — no audio, no lip-sync
+  lite: 20,     // Veo 3.1 Lite — native audio + lip-sync, ~$0.15/clip (cheap!)
   standard: 3,   // Veo 3.0-fast (~$1.20/clip)
-  premium: 2,    // Veo 3.1 (~$3.20/clip) — kept for quotes pipeline
+  premium: 2,    // Veo 3.1 full (~$3.20/clip) — quotes pipeline
 };
 
 const MODELS = {
-  fast: "veo-2.0-generate-001",          // Free tier / cheapest — default
-  standard: "veo-3.0-fast-generate-001", // Mid-tier (~$0.15/s)
-  premium: "veo-3.1-generate-preview",   // Best quality + native audio (~$0.40/s)
+  fast: "veo-2.0-generate-001",          // Free tier — text+image to video, no audio
+  lite: "veo-3.1-lite-generate-preview", // Veo 3.1 Lite — native audio + lip-sync, cheapest paid
+  standard: "veo-3.0-fast-generate-001", // Veo 3.0 fast — native audio
+  premium: "veo-3.1-generate-preview",   // Best quality + native audio
 };
 
 // Priority order: cheapest first — always prefer lower cost
-const MODEL_PRIORITY = ["fast", "standard", "premium"];
+// Priority for pickAvailableModel(): cheapest viable first.
+// fast (free) is cheapest but no audio — only useful when caller doesn't need lip-sync.
+// lite ($0.15/clip) is cheapest with native audio + lip-sync.
+const MODEL_PRIORITY = ["fast", "lite", "standard", "premium"];
 
 // Track daily usage per model: { "2026-03-29": { fast: 1, standard: 0, premium: 0 } }
 let _dailyUsage = { date: "", counts: {} };

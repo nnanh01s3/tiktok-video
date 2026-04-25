@@ -134,24 +134,32 @@ export async function generateScripts(product, style = "urgent", log = console.l
   const productName = (product.name || "Sản phẩm Shopee").slice(0, 100);
   const price = product.price ? `${product.price.toLocaleString("vi")}đ` : "giá tốt";
 
-  const prompt = `Bạn là creative director cho video bán hàng Shopee.
+  const prompt = `Bạn là creative director cho video bán hàng Shopee. Pipeline:
+- 0-8s: AI Veo 3.1 Lite render MC (woman) đọc hookLine với native lip-sync. Veo nhận ảnh sản phẩm thật làm reference.
+- 8s+: Slideshow ảnh sản phẩm với Gemini TTS đọc extendedScript.
+- Tổng video target ~35-40s (loop nếu cần).
 
 Sản phẩm: "${productName}"
 Giá: ${price}
 Style: ${styleDesc}
 
-Tạo 2 thứ:
+Tạo 3 thứ (JSON):
 
-1. veoHookPrompt — prompt tiếng Anh ngắn (≤ 300 ký tự) cho AI Veo tạo clip cinematic 8s, 9:16 vertical, mô tả close-up sản phẩm context tự nhiên. KHÔNG có text hay logo trong scene.
+1. veoHookPrompt — prompt tiếng Anh (350-650 ký tự) cho Veo 3.1 Lite render 8s, 9:16. PHẢI:
+   - MC: "Young attractive Vietnamese woman (early 20s), stylish modern outfit (crop top + jeans / form-fitting casual), confident charming smile, slightly flirty energy, well-groomed hair and makeup, cheerful young female voice"
+   - Setting: bright modern apartment với soft warm lighting
+   - QUAN TRỌNG: Visual phải match the product in the reference image — sản phẩm đúng đó, không hư cấu. Phrase: "exactly matching the product shown in reference image"
+   - Action: cô ấy holding/demonstrating sản phẩm, dynamic poses, eye contact với camera
+   - Speech: "She speaks directly to camera with energetic cheerful tone:" + QUOTE hookLine trong dấu nháy kép. Veo sẽ lip-sync.
+   - Camera: smooth handheld, quick zoom-ins on product, modern color grading
+   - 9:16 vertical, 8 seconds, no overlay text/logo
 
-2. voiceoverScript — script tiếng Việt 150–180 từ (đọc 60–65 giây), gồm:
-   - Hook 1 câu (gây tò mò)
-   - 3 lý do nên mua (mỗi cái 1–2 câu, nhấn vào đặc điểm sản phẩm)
-   - Giá ${price}
-   - CTA "Mua ngay link dưới"
+2. hookLine — câu Việt ≤ 25 TỪ (Veo lip-sync trong 8s đầu). Hài hước, nhồi tên SP. Ví dụ: "Nhà bạn bụi bẩn quá hả? Máy Hút TAMASHIO 6 đầu — cứu tinh đây nha!"
+
+3. extendedScript — script Việt 50-80 từ (Gemini TTS đọc 20-30s) cho slideshow. KHÔNG lặp lại hookLine. Gồm: 2-3 đặc điểm cụ thể (số liệu, tính năng) + giá ${price} + CTA "Link mua ngay bên dưới". Tone duyên dáng có chút hài.
 
 Trả về JSON đúng format:
-{"veoHookPrompt":"...","voiceoverScript":"..."}
+{"veoHookPrompt":"...","hookLine":"...","extendedScript":"..."}
 
 Chỉ JSON, không giải thích.`;
 
@@ -176,19 +184,27 @@ Chỉ JSON, không giải thích.`;
     // Strip code fences if Claude wraps the JSON
     const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
     const parsed = JSON.parse(cleaned);
-    if (!parsed.veoHookPrompt || !parsed.voiceoverScript) {
-      throw new Error("missing fields");
+    if (!parsed.veoHookPrompt || !parsed.hookLine || !parsed.extendedScript) {
+      // Backward compat: old voiceoverScript field as fallback for both
+      if (parsed.voiceoverScript && !parsed.hookLine) {
+        parsed.hookLine = parsed.voiceoverScript.split(/[.!?]/)[0].slice(0, 100);
+        parsed.extendedScript = parsed.voiceoverScript;
+      } else {
+        throw new Error("missing fields");
+      }
     }
-    log(`   [veo-hook] script OK (vo=${parsed.voiceoverScript.length} chars)`);
+    log(`   [veo-hook] script OK (hook=${parsed.hookLine.length}c, ext=${parsed.extendedScript.length}c)`);
     return parsed;
   } catch (e) {
     log(`   [veo-hook] Claude fail (${e.message?.slice(0, 60)}) — using template`);
+    const shortName = productName.slice(0, 40);
+    const hookLine = `Khoan! ${shortName} đây — bán chạy số 1!`;
     return {
-      veoHookPrompt: `Cinematic close-up of ${productName.slice(0, 60)}, dramatic lighting, slow zoom, 9:16 vertical, no text`,
-      voiceoverScript:
-        `Bạn đã thấy ${productName.slice(0, 60)} chưa? Đây là sản phẩm bán chạy nhất tuần này. ` +
-        `Thứ nhất, chất lượng tốt, đáng đồng tiền. Thứ hai, nhiều người mua đã đánh giá 5 sao. ` +
-        `Thứ ba, ưu đãi đang giảm sâu. Giá chỉ ${price}. Mua ngay link bên dưới, đừng bỏ lỡ!`,
+      veoHookPrompt: `Young attractive Vietnamese woman (early 20s), stylish modern outfit, charming smile, in bright apartment. She holds the ${shortName} (exactly matching the product in reference image), demonstrating with confident hands, eye contact with camera. She speaks directly to camera with energetic cheerful tone: "${hookLine}" Smooth handheld camera, quick zoom-ins, modern color grading. 9:16 vertical, 8 seconds, no overlay text.`,
+      hookLine,
+      extendedScript:
+        `Sản phẩm này dùng siêu sướng tay, chất lượng đảm bảo, ưu đãi đang giảm sâu. ` +
+        `Giá chỉ ${price}, rẻ hơn ly trà sữa. Link mua ngay bên dưới, đừng bỏ lỡ nha!`,
     };
   }
 }
@@ -223,8 +239,9 @@ export async function generateHookClip(veoPrompt, imagePath, outputPath, opts = 
     throw new Error("mock Veo ffmpeg failed");
   }
 
-  // Quota gate: only allow fast | standard for shopee hook.
-  const modelKey = pickAvailableModel();
+  // Use opts.veoModel if provided (e.g. "lite" for native audio + lip-sync).
+  // Otherwise fall back to pickAvailableModel() priority order.
+  const modelKey = opts.veoModel || pickAvailableModel();
   if (!modelKey || modelKey === "premium") {
     log(`   [veo-hook] Veo quota exhausted (or only premium left) → Ken Burns fallback`);
     return { fallback: "kenburns_only" };
@@ -252,10 +269,22 @@ export async function generateHookClip(veoPrompt, imagePath, outputPath, opts = 
  */
 export async function generateVoiceover(script, style, outputPath, opts = {}) {
   const log = opts.log || console.log;
-  const voiceMap = { urgent: "Fenrir", elegant: "Enceladus", playful: "Puck" };
-  const voice = voiceMap[style] || "Charon";
+  // Female voices, high-energy bias for Shopee hook ads (per user feedback:
+  // "giọng nữ, tông cao, đọc nhanh"). NOT same as quotes pipeline (Algenib/male).
+  const voiceMap = {
+    urgent:  "Zephyr",   // Bright, fast — best for energetic hook ads
+    elegant: "Aoede",    // Smooth, warm female — beauty/fashion
+    playful: "Leda",     // Youthful, upbeat female — family/playful
+  };
+  const styleInstruction = {
+    urgent:  "Speak in a fast, energetic, high-pitched young Vietnamese female voice. Maximum enthusiasm, like a TikTok product reviewer. Quick pace, no pauses.",
+    elegant: "Speak in a warm, smooth, slightly fast young Vietnamese female voice. Confident, friendly, premium feel.",
+    playful: "Speak in a playful, upbeat, fast young Vietnamese female voice. Cheerful, like talking to a friend.",
+  };
+  const voice = voiceMap[style] || "Zephyr";
+  const styleText = styleInstruction[style] || styleInstruction.urgent;
   try {
-    const r = await generateGeminiTTS(script, outputPath, { voice });
+    const r = await generateGeminiTTS(script, outputPath, { voice, style: styleText });
     log(`   [veo-hook] TTS OK (voice=${voice}, ${(r.sizeBytes / 1024).toFixed(0)}KB)`);
     return { path: r.path };
   } catch (e) {
@@ -265,114 +294,137 @@ export async function generateVoiceover(script, style, outputPath, opts = {}) {
 }
 
 /**
- * Compose final 60-70s MP4 from segment ingredients.
+ * Compose final video from Veo clip + slideshow + extended TTS, with auto-loop.
  *
- * Structure:
- *   Segment A (0-8s):   Veo clip OR Ken Burns on image-0 (if fallback)
- *   Segment B (8-28s):  4 images × 5s each, Ken Burns zoompan
- *   Segment C (28-60s): 4 detail crops (zoom into product regions), 8s each
- *   Outro freeze (60-65s): last image static + price + CTA
+ * Architecture (Option A from user):
+ *   - Veo segment (8s): native audio + lip-sync from Veo (MC speaks hookLine)
+ *   - Slideshow segment (~25-30s): all images Ken Burns 5s each + extended TTS
+ *   - If total < targetDuration, append the result to itself (loop) to extend
  *
- * Voiceover muxed across full duration. Text overlays per beat.
+ * Text overlays start at 8s (after Veo segment) so MC speaking is uninterrupted.
+ * Persistent page signature bottom-right throughout.
  *
  * @param {Object} args
- * @param {string|null} args.veoClip   - hook clip path or null (fallback)
- * @param {string[]} args.images       - 1080x1920 JPGs (≥4 ideal, ≥1 required)
- * @param {string|null} args.voiceover - TTS file or null
- * @param {Object} args.product        - for hook text + price
+ * @param {string|null} args.veoClip       - 8s Veo clip path WITH native audio (or null = Ken Burns fallback)
+ * @param {string[]} args.images           - 1080x1920 JPGs (≥1 required, all used in slideshow)
+ * @param {string|null} args.extendedAudio - Gemini TTS extendedScript audio file (or null)
+ * @param {Object} args.product            - for text overlays + price
  * @param {string} args.outputPath
+ * @param {string|null} args.pageName      - persistent signature bottom-right
+ * @param {number} [args.targetDuration=35] - seconds; loop if (veo+slideshow) < this
  * @param {Function} args.log
  */
-export async function composeVideo({ veoClip, images, voiceover, product, outputPath, log = console.log }) {
+export async function composeVideo({
+  veoClip, images, extendedAudio, product, outputPath,
+  log = console.log, pageName = null, targetDuration = 35,
+}) {
   const workDir = dirname(outputPath);
   mkdirSync(workDir, { recursive: true });
-
   if (images.length === 0) throw new Error("composeVideo: no images");
-  // Pad image array up to 4 by repeating
-  const imgs = [...images];
-  while (imgs.length < 4) imgs.push(imgs[imgs.length - 1]);
 
   const segDir = join(workDir, "_seg");
   mkdirSync(segDir, { recursive: true });
 
-  // ── Segment A (8s) ──
+  // ffprobe helper for duration
+  const ffprobePath = FFMPEG.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
+  const probeDur = (p) => {
+    const r = run(`"${ffprobePath}" -v error -show_entries format=duration -of csv=p=0 "${p}"`, 10_000);
+    return parseFloat((r.stdout || "0").trim()) || 0;
+  };
+
+  // Segment A: Veo 8s WITH native audio (or Ken Burns fallback w/ silent track)
   const segAPath = join(segDir, "a.mp4");
   if (veoClip && existsSync(veoClip)) {
-    // Re-encode to ensure consistent codec params
-    run(`"${FFMPEG}" -y -i "${veoClip}" -vf "scale=1080:1920,format=yuv420p,fps=25" -c:v libx264 -preset fast -crf 23 -an "${segAPath}"`, 60_000);
+    // Re-encode but KEEP audio (Veo's native audio + lip-sync).
+    run(`"${FFMPEG}" -y -i "${veoClip}" -vf "scale=1080:1920,format=yuv420p,fps=25" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${segAPath}"`, 60_000);
   } else {
-    run(`"${FFMPEG}" -y -loop 1 -i "${imgs[0]}" -t 8 -vf "zoompan=z='min(zoom+0.0015,1.3)':d=200:s=1080x1920:fps=25,format=yuv420p" -c:v libx264 -preset fast -crf 23 -an "${segAPath}"`, 60_000);
+    // Fallback: Ken Burns on image-0 with silent audio track.
+    run(`"${FFMPEG}" -y -loop 1 -i "${images[0]}" -f lavfi -i anullsrc=r=44100:cl=stereo -t 8 -vf "zoompan=z='min(zoom+0.0015,1.3)':d=200:s=1080x1920:fps=25,format=yuv420p" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -shortest "${segAPath}"`, 60_000);
   }
 
-  // ── Segment B (4 × 5s = 20s) — Ken Burns slideshow ──
+  // Segment B: slideshow of ALL images, Ken Burns 5s each, with silent audio
+  const slideDur = 5;
   const segBPaths = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < images.length; i++) {
     const p = join(segDir, `b_${i}.mp4`);
     const direction = i % 2 === 0
       ? "zoompan=z='min(zoom+0.001,1.25)':d=125:s=1080x1920:fps=25"
       : "zoompan=z='if(lte(zoom,1.0),1.25,max(1.001,zoom-0.001))':d=125:s=1080x1920:fps=25";
-    run(`"${FFMPEG}" -y -loop 1 -i "${imgs[i]}" -t 5 -vf "${direction},format=yuv420p" -c:v libx264 -preset fast -crf 23 -an "${p}"`, 60_000);
+    run(`"${FFMPEG}" -y -loop 1 -i "${images[i]}" -f lavfi -i anullsrc=r=44100:cl=stereo -t ${slideDur} -vf "${direction},format=yuv420p" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -shortest "${p}"`, 60_000);
     segBPaths.push(p);
   }
 
-  // ── Segment C (4 × 8s = 32s) — detail crops ──
-  // Crop quadrants of each image then upscale, gives a "product detail tour"
-  const cropSpecs = [
-    "0:0",                    // top-left
-    "in_w/2:0",               // top-right
-    "0:in_h/2",               // bottom-left
-    "in_w/2:in_h/2",          // bottom-right
-  ];
-  const segCPaths = [];
-  for (let i = 0; i < 4; i++) {
-    const p = join(segDir, `c_${i}.mp4`);
-    const cr = cropSpecs[i % cropSpecs.length];
-    run(`"${FFMPEG}" -y -loop 1 -i "${imgs[i % imgs.length]}" -t 8 -vf "crop=in_w/2:in_h/2:${cr},scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p" -c:v libx264 -preset fast -crf 23 -an "${p}"`, 60_000);
-    segCPaths.push(p);
+  // Concat Veo + slideshow
+  const concatList = join(segDir, "concat.txt");
+  const allSegs = [segAPath, ...segBPaths];
+  writeFileSync(concatList, allSegs.map(p => `file '${p.replace(/\\/g, "/")}'`).join("\n"));
+  const joinedPath = join(segDir, "joined.mp4");
+  run(`"${FFMPEG}" -y -f concat -safe 0 -i "${concatList}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${joinedPath}"`, 120_000);
+
+  // Mux extended TTS over slideshow portion (delayed by Veo length)
+  const veoLen = probeDur(segAPath);  // ~8s
+  let withExtAudio = joinedPath;
+  if (extendedAudio && existsSync(extendedAudio)) {
+    withExtAudio = join(segDir, "with_ext.mp4");
+    const delayMs = Math.max(0, Math.floor(veoLen * 1000));
+    // Mix joined's audio (Veo for 0-veoLen, silence after) with extended TTS
+    // delayed to start at veoLen. Use adelay=N:all=1 (works for mono+stereo)
+    // and duration=first (don't extend beyond joined.mp4 length).
+    run(`"${FFMPEG}" -y -i "${joinedPath}" -i "${extendedAudio}" -filter_complex "[1:a]adelay=${delayMs}:all=1[delayed];[0:a][delayed]amix=inputs=2:duration=first:dropout_transition=0[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 128k "${withExtAudio}"`, 120_000);
   }
 
-  // ── Concatenate all 9 segments via concat demuxer ──
-  const concatList = join(segDir, "concat.txt");
-  const allSegs = [segAPath, ...segBPaths, ...segCPaths];
-  writeFileSync(concatList, allSegs.map(p => `file '${p.replace(/\\/g, "/")}'`).join("\n"));
+  // Auto-loop if duration < targetDuration
+  const oneLoopLen = probeDur(withExtAudio);
+  let loopedPath = withExtAudio;
+  if (oneLoopLen > 0 && oneLoopLen < targetDuration) {
+    log(`   [veo-hook] one-pass=${oneLoopLen.toFixed(1)}s < target=${targetDuration}s, looping`);
+    const loopList = join(segDir, "loop.txt");
+    const passes = Math.ceil(targetDuration / oneLoopLen);
+    writeFileSync(loopList, Array(passes).fill(`file '${withExtAudio.replace(/\\/g, "/")}'`).join("\n"));
+    loopedPath = join(segDir, "looped.mp4");
+    run(`"${FFMPEG}" -y -f concat -safe 0 -i "${loopList}" -c copy "${loopedPath}"`, 120_000);
+  }
 
-  const noTextPath = join(segDir, "joined.mp4");
-  run(`"${FFMPEG}" -y -f concat -safe 0 -i "${concatList}" -c:v libx264 -preset fast -crf 23 -an "${noTextPath}"`, 120_000);
-
-  // ── Text overlays (drawtext at key beats) ──
+  // Text overlays (start AFTER Veo's lip-sync segment to not cover MC's face)
   const fontEsc = FONT.replace(/\\/g, "/").replace(/:/g, "\\:");
   const productName = (product.name || "").replace(/[【】\[\]()（）'":]/g, "").slice(0, 38);
   const priceTxt = product.price ? `${product.price.toLocaleString("vi")}d` : "Gia tot";
-  const esc = (s) => s.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/[[\]"]/g, "").replace(/%/g, "%%");
+  const soldTxt = product.sold
+    ? (product.sold >= 1_000_000 ? `Da ban ${Math.floor(product.sold / 1_000_000)}M+`
+      : product.sold >= 1000 ? `Da ban ${Math.floor(product.sold / 1000)}k+` : `Da ban ${product.sold}+`)
+    : "Ban chay";
+  const esc = (s) => s.replace(/'/g, "’").replace(/:/g, "\\:").replace(/[[\]"]/g, "").replace(/%/g, "%%");
 
-  const drawtexts = [
-    `drawtext=fontfile='${fontEsc}':text='${esc(productName)}':fontcolor=white:fontsize=46:x=(w-text_w)/2:y=120:enable='between(t,1,7)':box=1:boxcolor=black@0.6:boxborderw=18:shadowcolor=black:shadowx=3:shadowy=3`,
-    `drawtext=fontfile='${fontEsc}':text='Ban chay so 1':fontcolor=yellow:fontsize=52:x=(w-text_w)/2:y=200:enable='between(t,10,14)':box=1:boxcolor=black@0.7:boxborderw=14`,
-    `drawtext=fontfile='${fontEsc}':text='Chat luong dam bao':fontcolor=yellow:fontsize=48:x=(w-text_w)/2:y=200:enable='between(t,18,22)':box=1:boxcolor=black@0.7:boxborderw=14`,
-    `drawtext=fontfile='${fontEsc}':text='Uu dai cuc soc':fontcolor=yellow:fontsize=48:x=(w-text_w)/2:y=200:enable='between(t,24,28)':box=1:boxcolor=black@0.7:boxborderw=14`,
-    `drawtext=fontfile='${fontEsc}':text='${esc(priceTxt)}':fontcolor=white:fontsize=110:x=(w-text_w)/2:y=h/2-60:enable='between(t,40,50)':box=1:boxcolor=red@0.8:boxborderw=24:shadowcolor=black:shadowx=4:shadowy=4`,
-    `drawtext=fontfile='${fontEsc}':text='MUA NGAY LINK DUOI':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=h-260:enable='between(t,52,60)':box=1:boxcolor=red@0.85:boxborderw=20`,
-  ].join(",");
+  const overlays = [
+    // 8.5-13s: product name + sold
+    `drawtext=fontfile='${fontEsc}':text='${esc(productName)}':fontcolor=white:fontsize=46:x=(w-text_w)/2:y=120:enable='between(t,8.5,13)':box=1:boxcolor=black@0.7:boxborderw=18:shadowcolor=black:shadowx=3:shadowy=3`,
+    `drawtext=fontfile='${fontEsc}':text='${esc(soldTxt)}':fontcolor=yellow:fontsize=56:x=(w-text_w)/2:y=240:enable='between(t,8.5,13)':box=1:boxcolor=black@0.75:boxborderw=14`,
+    // 13-23s: feature callouts
+    `drawtext=fontfile='${fontEsc}':text='Chat luong dam bao':fontcolor=yellow:fontsize=52:x=(w-text_w)/2:y=200:enable='between(t,13,18)':box=1:boxcolor=black@0.75:boxborderw=14`,
+    `drawtext=fontfile='${fontEsc}':text='Uu dai cuc soc':fontcolor=yellow:fontsize=52:x=(w-text_w)/2:y=200:enable='between(t,18,23)':box=1:boxcolor=black@0.75:boxborderw=14`,
+    // 23-30s: BIG price
+    `drawtext=fontfile='${fontEsc}':text='${esc(priceTxt)}':fontcolor=white:fontsize=110:x=(w-text_w)/2:y=h/2-60:enable='between(t,23,30)':box=1:boxcolor=red@0.85:boxborderw=24:shadowcolor=black:shadowx=4:shadowy=4`,
+    // 30s+: CTA persistent until end
+    `drawtext=fontfile='${fontEsc}':text='MUA NGAY LINK DUOI':fontcolor=white:fontsize=58:x=(w-text_w)/2:y=h-260:enable='gte(t,30)':box=1:boxcolor=red@0.85:boxborderw=20`,
+  ];
 
-  // ── Final encode: drawtext + voiceover (if any) ──
-  const hasVoice = voiceover && existsSync(voiceover);
-  const args = [
-    `"${FFMPEG}"`, "-y",
-    `-i "${noTextPath}"`,
-    hasVoice ? `-i "${voiceover}"` : "",
-    `-filter_complex "[0:v]${drawtexts}[v]"`,
-    `-map "[v]"`,
-    hasVoice ? `-map 1:a -shortest -c:a aac -b:a 128k` : `-an`,
-    `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p`,
-    `"${outputPath}"`,
-  ].filter(Boolean).join(" ");
-  run(args, 240_000);
+  // Persistent page signature (bottom-right, always)
+  if (pageName) {
+    const sig = esc(pageName.replace(/[^\p{L}\p{N} &]/gu, "").slice(0, 30));
+    overlays.push(
+      `drawtext=fontfile='${fontEsc}':text='${sig}':fontcolor=white:fontsize=30:x=w-text_w-25:y=h-80:box=1:boxcolor=black@0.55:boxborderw=10`
+    );
+  }
+  const drawtexts = overlays.join(",");
+
+  // Final encode: apply overlays (audio passes through unchanged)
+  run(`"${FFMPEG}" -y -i "${loopedPath}" -filter_complex "[0:v]${drawtexts}[v]" -map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a copy "${outputPath}"`, 240_000);
 
   if (!existsSync(outputPath) || statSync(outputPath).size < 200_000) {
     const sz = existsSync(outputPath) ? statSync(outputPath).size : 0;
     throw new Error(`composeVideo: output too small or missing — ${sz} bytes`);
   }
-  log(`   [veo-hook] composed ${(statSync(outputPath).size / 1024 / 1024).toFixed(1)}MB → ${outputPath}`);
+  log(`   [veo-hook] composed ${(statSync(outputPath).size / 1024 / 1024).toFixed(1)}MB, ${probeDur(outputPath).toFixed(1)}s -> ${outputPath}`);
   return { path: outputPath };
 }
 
@@ -398,22 +450,31 @@ export async function generateVeoHookVideo(product, outputPath, opts = {}) {
   // Step 1: images
   const images = await prepareImages(product, workDir, log);
 
-  // Step 2: scripts
-  const { veoHookPrompt, voiceoverScript } = await generateScripts(product, style, log);
+  // Step 2: scripts (3 fields: veoHookPrompt, hookLine, extendedScript)
+  const { veoHookPrompt, extendedScript } = await generateScripts(product, style, log);
 
-  // Step 3: Veo (or fallback)
+  // Step 3: Veo Lite WITH product image reference (native audio + lip-sync for hookLine).
+  // Pass images[0] as the visual anchor so Veo renders the actual product, not generic.
   const hookOut = join(workDir, "hook.mp4");
-  const veoResult = await generateHookClip(veoHookPrompt, images[0], hookOut, { ...opts, log });
+  const veoResult = await generateHookClip(veoHookPrompt, images[0], hookOut, {
+    ...opts,
+    veoModel: opts.veoModel || "lite",  // Veo 3.1 Lite default — cheap + native audio
+    log,
+  });
   const veoClip = veoResult.path || null;
   const veoTier = veoResult.model || null;
 
-  // Step 4: TTS
+  // Step 4: Gemini TTS reads ONLY extendedScript (Veo handles hookLine for 0-8s)
   const voPath = join(workDir, "vo.mp3");
-  const voResult = await generateVoiceover(voiceoverScript, style, voPath, { log });
-  const voiceover = voResult.path;
+  const voResult = await generateVoiceover(extendedScript, style, voPath, { log });
+  const extendedAudio = voResult.path;
 
-  // Step 5: compose
-  await composeVideo({ veoClip, images, voiceover, product, outputPath, log });
+  // Step 5: compose (Veo with native audio + slideshow with extended TTS + auto-loop)
+  const targetDuration = opts.targetDuration || 35;
+  await composeVideo({
+    veoClip, images, extendedAudio, product, outputPath,
+    log, pageName: opts.pageName || null, targetDuration,
+  });
 
   // Step 6: cleanup intermediates (keep final output)
   if (opts.cleanup !== false) {
