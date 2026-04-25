@@ -454,24 +454,34 @@ state.last_check = new Date().toISOString();
 saveState(state);
 
 log("\n" + "=".repeat(60));
-log(`✅ Đăng ${success}/${toProcess.length} video | Page: ${PAGE.name}`);
-log(`📊 Tổng hôm nay: ${doneToday + success}/${MAX_PER_DAY}`);
+log(`✅ Page: ${PAGE.name}`);
+log(`   Posted ${success}/${toProcess.length} videos`);
+for (const post of state.posts_today.slice(-success)) {
+  const tag = post.isVeoHook ? `[Veo hook tier=${post.veoTier || "kenburns"}]` : `[video gốc]`;
+  log(`   - ${tag.padEnd(28)} ${post.productName?.slice(0, 50) || post.shopeeItemId} | fb=${post.fbPostId || "-"}`);
+}
 
-// Final reminder: repeat missing CSV list if any (easy to see at bottom)
 if (withoutLink.length > 0) {
   log("");
   log("─".repeat(60));
-  log(`⚠️  NHẮC NHỞ: ${withoutLink.length} sản phẩm cần xuất CSV link:`);
+  log(`⚠️  ${withoutLink.length} SP CẦN CSV short link (export thủ công):`);
   for (const p of withoutLink) {
     log(`   - ${p.itemId}  "${(p.name || "").slice(0, 60)}"`);
   }
-  log(`Bước kế tiếp:`);
-  log(`  1. Truy cập https://affiliate.shopee.vn`);
-  log(`  2. Tìm từng itemId trên → nhấn "Lấy link" → đưa vào danh sách`);
-  log(`  3. Export CSV → drop vào D:/tiktok/ (file tên link_san_pham_shopee_*.csv)`);
-  log(`  4. Rerun: node src/shopee/reup.mjs --page ${pageArg}`);
+  log(`Bước: affiliate.shopee.vn → "Lấy link" → export CSV → drop vào D:/tiktok/`);
   log("─".repeat(60));
 }
+
+// Veo quota snapshot
+try {
+  const veoMod = await import("../veo.js");
+  const counts = veoMod.pickAvailableModel ? "(see [Veo] log lines above for usage)" : "";
+  log(`📊 Veo quota: ${counts}`);
+} catch {}
+
+log(`📊 Tổng đã post lifetime: ${state.used_shopee_ids.length} SP`);
+log(`📊 Tổng hôm nay: ${doneToday + success}/${MAX_PER_DAY}`);
+log("=".repeat(60));
 
 // Cleanup raw files > 3 days
 const cutoff = Date.now() - 3 * 24 * 3600_000;
