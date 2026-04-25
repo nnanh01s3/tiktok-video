@@ -85,6 +85,7 @@ function resetIfNewDay(state) {
   const today = new Date().toISOString().slice(0, 10);
   if (state.last_reset !== today) { state.posts_today = []; state.last_reset = today; }
   if (!Array.isArray(state.used_shopee_ids)) state.used_shopee_ids = [];
+  if (!Array.isArray(state.processed_ids)) state.processed_ids = [];
   return state;
 }
 function loadCaptionHistory() {
