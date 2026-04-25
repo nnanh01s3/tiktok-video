@@ -31,6 +31,13 @@ export const SHOPEE_CATEGORIES = {
   bach_hoa:    { catids: [100001, 100629, 100639],   matchIds: [100639, 100017] },
 };
 
+// veoHookConfig (consumed by src/shopee/veo_hook.mjs):
+//   style: "urgent" | "elegant" | "playful"
+//     — drives Claude prompt tone and TTS voice selection
+//   targetDuration: number (seconds)
+//     — floor for the composed video; compose targets 60–70s total
+//       (8s Veo hook + Ken Burns slideshow + detail crops)
+
 // ── Page Configs — ALL PostForMe ──────────────────────────────────────────
 export const PAGES = {
   shopee: {
