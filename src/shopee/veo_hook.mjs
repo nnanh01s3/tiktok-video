@@ -23,7 +23,7 @@ import {
   existsSync, statSync, unlinkSync,
 } from "fs";
 import { join, dirname } from "path";
-import { FFMPEG } from "./config.mjs";
+import { FFMPEG, FONT } from "./config.mjs";
 import { generateVideo, pickAvailableModel } from "../veo.js";
 import { generateGeminiTTS } from "../gemini-tts.js";
 
@@ -262,4 +262,116 @@ export async function generateVoiceover(script, style, outputPath, opts = {}) {
     log(`   [veo-hook] TTS failed (${e.message?.slice(0, 80)}) — composing without voiceover`);
     return { path: null };
   }
+}
+
+/**
+ * Compose final 60-70s MP4 from segment ingredients.
+ *
+ * Structure:
+ *   Segment A (0-8s):   Veo clip OR Ken Burns on image-0 (if fallback)
+ *   Segment B (8-28s):  4 images × 5s each, Ken Burns zoompan
+ *   Segment C (28-60s): 4 detail crops (zoom into product regions), 8s each
+ *   Outro freeze (60-65s): last image static + price + CTA
+ *
+ * Voiceover muxed across full duration. Text overlays per beat.
+ *
+ * @param {Object} args
+ * @param {string|null} args.veoClip   - hook clip path or null (fallback)
+ * @param {string[]} args.images       - 1080x1920 JPGs (≥4 ideal, ≥1 required)
+ * @param {string|null} args.voiceover - TTS file or null
+ * @param {Object} args.product        - for hook text + price
+ * @param {string} args.outputPath
+ * @param {Function} args.log
+ */
+export async function composeVideo({ veoClip, images, voiceover, product, outputPath, log = console.log }) {
+  const workDir = dirname(outputPath);
+  mkdirSync(workDir, { recursive: true });
+
+  if (images.length === 0) throw new Error("composeVideo: no images");
+  // Pad image array up to 4 by repeating
+  const imgs = [...images];
+  while (imgs.length < 4) imgs.push(imgs[imgs.length - 1]);
+
+  const segDir = join(workDir, "_seg");
+  mkdirSync(segDir, { recursive: true });
+
+  // ── Segment A (8s) ──
+  const segAPath = join(segDir, "a.mp4");
+  if (veoClip && existsSync(veoClip)) {
+    // Re-encode to ensure consistent codec params
+    run(`"${FFMPEG}" -y -i "${veoClip}" -vf "scale=1080:1920,format=yuv420p,fps=25" -c:v libx264 -preset fast -crf 23 -an "${segAPath}"`, 60_000);
+  } else {
+    run(`"${FFMPEG}" -y -loop 1 -i "${imgs[0]}" -t 8 -vf "zoompan=z='min(zoom+0.0015,1.3)':d=200:s=1080x1920:fps=25,format=yuv420p" -c:v libx264 -preset fast -crf 23 -an "${segAPath}"`, 60_000);
+  }
+
+  // ── Segment B (4 × 5s = 20s) — Ken Burns slideshow ──
+  const segBPaths = [];
+  for (let i = 0; i < 4; i++) {
+    const p = join(segDir, `b_${i}.mp4`);
+    const direction = i % 2 === 0
+      ? "zoompan=z='min(zoom+0.001,1.25)':d=125:s=1080x1920:fps=25"
+      : "zoompan=z='if(lte(zoom,1.0),1.25,max(1.001,zoom-0.001))':d=125:s=1080x1920:fps=25";
+    run(`"${FFMPEG}" -y -loop 1 -i "${imgs[i]}" -t 5 -vf "${direction},format=yuv420p" -c:v libx264 -preset fast -crf 23 -an "${p}"`, 60_000);
+    segBPaths.push(p);
+  }
+
+  // ── Segment C (4 × 8s = 32s) — detail crops ──
+  // Crop quadrants of each image then upscale, gives a "product detail tour"
+  const cropSpecs = [
+    "0:0",                    // top-left
+    "in_w/2:0",               // top-right
+    "0:in_h/2",               // bottom-left
+    "in_w/2:in_h/2",          // bottom-right
+  ];
+  const segCPaths = [];
+  for (let i = 0; i < 4; i++) {
+    const p = join(segDir, `c_${i}.mp4`);
+    const cr = cropSpecs[i % cropSpecs.length];
+    run(`"${FFMPEG}" -y -loop 1 -i "${imgs[i % imgs.length]}" -t 8 -vf "crop=in_w/2:in_h/2:${cr},scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,format=yuv420p" -c:v libx264 -preset fast -crf 23 -an "${p}"`, 60_000);
+    segCPaths.push(p);
+  }
+
+  // ── Concatenate all 9 segments via concat demuxer ──
+  const concatList = join(segDir, "concat.txt");
+  const allSegs = [segAPath, ...segBPaths, ...segCPaths];
+  writeFileSync(concatList, allSegs.map(p => `file '${p.replace(/\\/g, "/")}'`).join("\n"));
+
+  const noTextPath = join(segDir, "joined.mp4");
+  run(`"${FFMPEG}" -y -f concat -safe 0 -i "${concatList}" -c:v libx264 -preset fast -crf 23 -an "${noTextPath}"`, 120_000);
+
+  // ── Text overlays (drawtext at key beats) ──
+  const fontEsc = FONT.replace(/\\/g, "/").replace(/:/g, "\\:");
+  const productName = (product.name || "").replace(/[【】\[\]()（）'":]/g, "").slice(0, 38);
+  const priceTxt = product.price ? `${product.price.toLocaleString("vi")}d` : "Gia tot";
+  const esc = (s) => s.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/[[\]"]/g, "").replace(/%/g, "%%");
+
+  const drawtexts = [
+    `drawtext=fontfile='${fontEsc}':text='${esc(productName)}':fontcolor=white:fontsize=46:x=(w-text_w)/2:y=120:enable='between(t,1,7)':box=1:boxcolor=black@0.6:boxborderw=18:shadowcolor=black:shadowx=3:shadowy=3`,
+    `drawtext=fontfile='${fontEsc}':text='Ban chay so 1':fontcolor=yellow:fontsize=52:x=(w-text_w)/2:y=200:enable='between(t,10,14)':box=1:boxcolor=black@0.7:boxborderw=14`,
+    `drawtext=fontfile='${fontEsc}':text='Chat luong dam bao':fontcolor=yellow:fontsize=48:x=(w-text_w)/2:y=200:enable='between(t,18,22)':box=1:boxcolor=black@0.7:boxborderw=14`,
+    `drawtext=fontfile='${fontEsc}':text='Uu dai cuc soc':fontcolor=yellow:fontsize=48:x=(w-text_w)/2:y=200:enable='between(t,24,28)':box=1:boxcolor=black@0.7:boxborderw=14`,
+    `drawtext=fontfile='${fontEsc}':text='${esc(priceTxt)}':fontcolor=white:fontsize=110:x=(w-text_w)/2:y=h/2-60:enable='between(t,40,50)':box=1:boxcolor=red@0.8:boxborderw=24:shadowcolor=black:shadowx=4:shadowy=4`,
+    `drawtext=fontfile='${fontEsc}':text='MUA NGAY LINK DUOI':fontcolor=white:fontsize=60:x=(w-text_w)/2:y=h-260:enable='between(t,52,60)':box=1:boxcolor=red@0.85:boxborderw=20`,
+  ].join(",");
+
+  // ── Final encode: drawtext + voiceover (if any) ──
+  const hasVoice = voiceover && existsSync(voiceover);
+  const args = [
+    `"${FFMPEG}"`, "-y",
+    `-i "${noTextPath}"`,
+    hasVoice ? `-i "${voiceover}"` : "",
+    `-filter_complex "[0:v]${drawtexts}[v]"`,
+    `-map "[v]"`,
+    hasVoice ? `-map 1:a -shortest -c:a aac -b:a 128k` : `-an`,
+    `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p`,
+    `"${outputPath}"`,
+  ].filter(Boolean).join(" ");
+  run(args, 240_000);
+
+  if (!existsSync(outputPath) || statSync(outputPath).size < 200_000) {
+    const sz = existsSync(outputPath) ? statSync(outputPath).size : 0;
+    throw new Error(`composeVideo: output too small or missing — ${sz} bytes`);
+  }
+  log(`   [veo-hook] composed ${(statSync(outputPath).size / 1024 / 1024).toFixed(1)}MB → ${outputPath}`);
+  return { path: outputPath };
 }
