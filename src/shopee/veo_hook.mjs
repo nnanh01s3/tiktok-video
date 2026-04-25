@@ -113,3 +113,80 @@ function collectCdnPaths(product) {
   }
   return out;
 }
+
+const STYLE_DESCRIPTORS = {
+  urgent:  "fast cuts, neon accents, energetic music feel, punchy, attention-grabbing",
+  elegant: "soft pastel tones, slow motion, luxurious, calm, premium feel",
+  playful: "warm bright tones, family-friendly, cheerful, approachable",
+};
+
+/**
+ * Ask Claude Haiku for a Veo cinematic prompt + a 60–65s Vietnamese voiceover
+ * script tailored to the product and page style.
+ *
+ * Returns { veoHookPrompt: string, voiceoverScript: string }. On API failure,
+ * returns a template fallback so the caller can continue.
+ */
+export async function generateScripts(product, style = "urgent", log = console.log) {
+  const styleDesc = STYLE_DESCRIPTORS[style] || STYLE_DESCRIPTORS.urgent;
+  const productName = (product.name || "Sản phẩm Shopee").slice(0, 100);
+  const price = product.price ? `${product.price.toLocaleString("vi")}đ` : "giá tốt";
+
+  const prompt = `Bạn là creative director cho video bán hàng Shopee.
+
+Sản phẩm: "${productName}"
+Giá: ${price}
+Style: ${styleDesc}
+
+Tạo 2 thứ:
+
+1. veoHookPrompt — prompt tiếng Anh ngắn (≤ 300 ký tự) cho AI Veo tạo clip cinematic 8s, 9:16 vertical, mô tả close-up sản phẩm context tự nhiên. KHÔNG có text hay logo trong scene.
+
+2. voiceoverScript — script tiếng Việt 150–180 từ (đọc 60–65 giây), gồm:
+   - Hook 1 câu (gây tò mò)
+   - 3 lý do nên mua (mỗi cái 1–2 câu, nhấn vào đặc điểm sản phẩm)
+   - Giá ${price}
+   - CTA "Mua ngay link dưới"
+
+Trả về JSON đúng format:
+{"veoHookPrompt":"...","voiceoverScript":"..."}
+
+Chỉ JSON, không giải thích.`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const text = data.content?.[0]?.text?.trim() || "";
+    // Strip code fences if Claude wraps the JSON
+    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+    const parsed = JSON.parse(cleaned);
+    if (!parsed.veoHookPrompt || !parsed.voiceoverScript) {
+      throw new Error("missing fields");
+    }
+    log(`   [veo-hook] script OK (vo=${parsed.voiceoverScript.length} chars)`);
+    return parsed;
+  } catch (e) {
+    log(`   [veo-hook] Claude fail (${e.message?.slice(0, 60)}) — using template`);
+    return {
+      veoHookPrompt: `Cinematic close-up of ${productName.slice(0, 60)}, dramatic lighting, slow zoom, 9:16 vertical, no text`,
+      voiceoverScript:
+        `Bạn đã thấy ${productName.slice(0, 60)} chưa? Đây là sản phẩm bán chạy nhất tuần này. ` +
+        `Thứ nhất, chất lượng tốt, đáng đồng tiền. Thứ hai, nhiều người mua đã đánh giá 5 sao. ` +
+        `Thứ ba, ưu đãi đang giảm sâu. Giá chỉ ${price}. Mua ngay link bên dưới, đừng bỏ lỡ!`,
+    };
+  }
+}
