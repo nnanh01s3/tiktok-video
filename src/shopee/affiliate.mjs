@@ -590,7 +590,10 @@ export class ShopeeAffiliate {
             p => !usedIds.includes(p.itemId) && p.affiliateLink &&
                  p.commissionRate >= minCommission && (!videoOnly || p.hasVideo)
           );
-          const picked = fresh.slice(0, productsPerCat);
+          // For bestseller, push the full filtered pool so the final sort sees
+          // every eligible item across sources. For random, keep the per-source
+          // cap (legacy behavior — distributes randomness).
+          const picked = strategy === "bestseller" ? fresh : fresh.slice(0, productsPerCat);
           const withVideo = result.products.filter(p => p.hasVideo).length;
           log(`   ✅ ${result.products.length} SP (${withVideo} có video), ${picked.length} mới`);
           allProducts.push(...picked);

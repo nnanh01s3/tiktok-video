@@ -29,6 +29,10 @@ function assert(cond, msg) {
 
 // Test 1: empty usedIds → returns ≥1 product, sorted DESC by sold
 const r1 = await fetchTopN([]);
+if (r1.length === 0) {
+  console.error("  FATAL: no products found — cache missing or catid filter too narrow");
+  process.exit(1);
+}
 assert(r1.length > 0, `r1 has products (got ${r1.length})`);
 for (let i = 1; i < r1.length; i++) {
   const prev = r1[i-1].sold || 0, cur = r1[i].sold || 0;
