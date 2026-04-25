@@ -35,6 +35,7 @@ import { PAGES, BASE_DIR, FFMPEG } from "./config.mjs";
 import { REELS_SOURCES, pickSource } from "./reels-config.mjs";
 import { isVideoPosted, recordPostedVideo, getRecentSourceNames } from "../db.js";
 import { classifyRelevance } from "./reels-classifier.mjs";
+import { genReelsCaption } from "./reels-caption.mjs";
 
 // ── CLI args ──────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -486,8 +487,16 @@ for (let i = 0; i < toProcess.length; i++) {
       continue;
     }
 
-    const caption = makeCaption(video.title, PAGE_ARG);
-    log(`   📝 "${caption.slice(0, 80)}..."`);
+    // AI caption (Gemini Flash) → fallback to legacy hardcoded hooks if API fails.
+    // Provides per-post variety (vs old 8-hook rotation that became repetitive).
+    const aiCaption = await genReelsCaption(
+      { title: video.title, source_name: video._sourceName },
+      PAGE_ARG,
+      PAGE.name,
+      topic
+    );
+    const caption = aiCaption || makeCaption(video.title, PAGE_ARG);
+    log(`   📝 ${aiCaption ? "[AI]" : "[fallback]"} "${caption.slice(0, 80)}..."`);
 
     const { postId, scheduledAt } = await uploadAndPost(processed, caption, DELAY + i * 2);
 
