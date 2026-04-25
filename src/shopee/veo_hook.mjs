@@ -25,6 +25,7 @@ import {
 import { join, dirname } from "path";
 import { FFMPEG } from "./config.mjs";
 import { generateVideo, pickAvailableModel } from "../veo.js";
+import { generateGeminiTTS } from "../gemini-tts.js";
 
 const IMAGE_CDN = "https://down-vn.img.susercontent.com/file/";
 const MAX_IMAGES = 6;
@@ -240,5 +241,25 @@ export async function generateHookClip(veoPrompt, imagePath, outputPath, opts = 
   } catch (e) {
     log(`   [veo-hook] Veo failed (${e.message?.slice(0, 80)}) → Ken Burns fallback`);
     return { fallback: "kenburns_only" };
+  }
+}
+
+/**
+ * Generate VN voiceover using Gemini TTS. Saves to outputPath (.mp3 or .wav).
+ *
+ * Voice picked per style: urgent → Fenrir (excitable), elegant → Enceladus
+ * (breathy calm), playful → Puck (upbeat).
+ */
+export async function generateVoiceover(script, style, outputPath, opts = {}) {
+  const log = opts.log || console.log;
+  const voiceMap = { urgent: "Fenrir", elegant: "Enceladus", playful: "Puck" };
+  const voice = voiceMap[style] || "Charon";
+  try {
+    const r = await generateGeminiTTS(script, outputPath, { voice });
+    log(`   [veo-hook] TTS OK (voice=${voice}, ${(r.sizeBytes / 1024).toFixed(0)}KB)`);
+    return { path: r.path };
+  } catch (e) {
+    log(`   [veo-hook] TTS failed (${e.message?.slice(0, 80)}) — composing without voiceover`);
+    return { path: null };
   }
 }
