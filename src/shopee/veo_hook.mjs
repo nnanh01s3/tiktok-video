@@ -24,6 +24,7 @@ import {
 } from "fs";
 import { join, dirname } from "path";
 import { FFMPEG } from "./config.mjs";
+import { generateVideo, pickAvailableModel } from "../veo.js";
 
 const IMAGE_CDN = "https://down-vn.img.susercontent.com/file/";
 const MAX_IMAGES = 6;
@@ -188,5 +189,56 @@ Chỉ JSON, không giải thích.`;
         `Thứ nhất, chất lượng tốt, đáng đồng tiền. Thứ hai, nhiều người mua đã đánh giá 5 sao. ` +
         `Thứ ba, ưu đãi đang giảm sâu. Giá chỉ ${price}. Mua ngay link bên dưới, đừng bỏ lỡ!`,
     };
+  }
+}
+
+/**
+ * Generate the 8s Veo cinematic hook from image-1.
+ *
+ * Quota policy: try fast first, then standard. Skip premium (reserved for
+ * quotes). If both exhausted, returns { fallback: "kenburns_only" } and the
+ * caller composes without a Veo segment.
+ *
+ * @param {string} veoPrompt
+ * @param {string} imagePath - path to padded 1080x1920 JPG
+ * @param {string} outputPath
+ * @param {Object} opts
+ * @returns {Promise<{path: string, model: string} | {fallback: string}>}
+ */
+export async function generateHookClip(veoPrompt, imagePath, outputPath, opts = {}) {
+  const log = opts.log || console.log;
+
+  if (opts.mockVeo) {
+    // Test mode: produce a 8s placeholder by zoompanning the input image
+    const cmd =
+      `"${FFMPEG}" -y -loop 1 -i "${imagePath}" -t 8 ` +
+      `-vf "zoompan=z='min(zoom+0.0015,1.3)':d=200:s=1080x1920:fps=25,format=yuv420p" ` +
+      `-c:v libx264 -preset ultrafast -crf 26 "${outputPath}"`;
+    run(cmd, 30_000);
+    if (existsSync(outputPath) && statSync(outputPath).size > 50_000) {
+      log(`   [veo-hook] mock Veo clip generated`);
+      return { path: outputPath, model: "mock" };
+    }
+    throw new Error("mock Veo ffmpeg failed");
+  }
+
+  // Quota gate: only allow fast | standard for shopee hook.
+  const modelKey = pickAvailableModel();
+  if (!modelKey || modelKey === "premium") {
+    log(`   [veo-hook] Veo quota exhausted (or only premium left) → Ken Burns fallback`);
+    return { fallback: "kenburns_only" };
+  }
+
+  try {
+    const r = await generateVideo(veoPrompt, outputPath, {
+      model: modelKey,
+      image: imagePath,
+      aspectRatio: "9:16",
+    });
+    log(`   [veo-hook] Veo OK (tier=${r.model})`);
+    return { path: r.path, model: r.model };
+  } catch (e) {
+    log(`   [veo-hook] Veo failed (${e.message?.slice(0, 80)}) → Ken Burns fallback`);
+    return { fallback: "kenburns_only" };
   }
 }
