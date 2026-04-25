@@ -50,6 +50,7 @@ const PAGE = PAGES[pageArg];
 const BASE_DELAY = args.includes("--delay")
   ? parseInt(args[args.indexOf("--delay") + 1]) || 0
   : 0; // phút delay trước khi schedule video đầu tiên
+const DRY_RUN = args.includes("--dry-run");
 // Spacing between 2 videos from the same page. Reduced from 5→2 minutes
 // so the entire daily batch (18 FB videos) fits in a 15-minute window per
 // user request. Old value: 5 (spread up to 46 min). New value: 2.
@@ -352,23 +353,28 @@ if (!products.length) {
   process.exit(0);
 }
 
-// ── CSV-link partition ────────────────────────────────────────────────────
+// ── Partition: hasCsvLink + hasVideo ──────────────────────────────────────
 // Strict policy: only post products with official s.shopee.vn/xxx link from
-// CSV export (affiliate.shopee.vn → "Lấy link" → export CSV into D:/tiktok/).
-// Products without CSV link are skipped and reported at end of run so user
-// knows exactly which items to export.
-const withLink = [];
-const withoutLink = [];
-for (const p of products) {
-  if (getShortLinkFromCsv(p.itemId)) {
-    withLink.push(p);
-  } else {
-    withoutLink.push(p);
-  }
-}
+// CSV export. Products without CSV link are skipped and reported.
+// Also classify hasVideo so the Veo-hook branch is taken for no-video items.
+const partitioned = products.map(p => ({
+  product: p,
+  hasCsvLink: !!getShortLinkFromCsv(p.itemId),
+  hasVideo: !!p.videoUrl,
+}));
+
+const withLink = partitioned.filter(x => x.hasCsvLink).map(x => x.product);
+const withoutLink = partitioned.filter(x => !x.hasCsvLink).map(x => x.product);
+
+log(`\n📌 Top ${products.length} SP cho [${PAGE.name}]:`);
+partitioned.forEach((x, i) => {
+  const v = x.hasVideo ? "✅ video" : "⚠️ no-video → Veo hook";
+  const c = x.hasCsvLink ? "CSV ✅" : "CSV ❌ → SKIP";
+  log(`   [${i + 1}] "${(x.product.name || "").slice(0, 50)}" | sold ${x.product.sold || 0} | ${v} | ${c}`);
+});
 
 if (withoutLink.length > 0) {
-  log(`⚠️ ${withoutLink.length}/${products.length} sản phẩm CHƯA có CSV short link — sẽ skip:`);
+  log(`\n⚠️ ${withoutLink.length}/${products.length} sản phẩm CHƯA có CSV short link — sẽ skip:`);
   for (const p of withoutLink) {
     log(`   ⏭️  ${p.itemId} "${(p.name || "").slice(0, 60)}"`);
   }
@@ -383,7 +389,14 @@ if (!withLink.length) {
 }
 
 const toProcess = withLink.slice(0, slot);
-log(`📌 Xử lý ${toProcess.length}/${withLink.length} sản phẩm có CSV link\n`);
+log(`\n📌 Xử lý ${toProcess.length}/${withLink.length} sản phẩm có CSV link`);
+
+if (DRY_RUN) {
+  log(`\n🧪 DRY RUN — exiting before download/post`);
+  state.last_check = new Date().toISOString();
+  saveState(state);
+  process.exit(0);
+}
 
 // Check if page has a valid posting account configured
 if (!poster.getFacebookId() && !poster.getTikTokId()) {
