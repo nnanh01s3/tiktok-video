@@ -109,7 +109,7 @@ async function discoverProducts(usedIds) {
     const opts = {
       strategy: PAGE.strategy || "random",
       categoriesPerRun: 4,
-      productsPerCat: PAGE.strategy === "bestseller" ? Math.max(3, MAX_PER_RUN) : 4,
+      productsPerCat: PAGE.strategy === "bestseller" ? 50 : 4,
       minCommission: 0,
       videoOnly: PAGE.strategy === "bestseller" ? false : true,
       log,
