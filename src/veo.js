@@ -19,12 +19,16 @@
  * Rate limits: 2 uses/model/day. Videos retained 2 days.
  */
 import { GoogleGenAI } from "@google/genai";
-import { writeFileSync, existsSync, mkdirSync } from "fs";
+import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname } from "path";
 
 const POLL_INTERVAL_MS = 10_000; // 10 seconds between status checks
 const MAX_POLL_ATTEMPTS = 60;    // 10 minutes max wait
-const MAX_USES_PER_MODEL_PER_DAY = 2;
+const MAX_USES_PER_MODEL = {
+  fast: 10,      // Veo 2.0 free tier — bumped 2 → 10 for shopee hook flow
+  standard: 3,   // Veo 3.0-fast (~$1.20/clip)
+  premium: 2,    // Veo 3.1 (~$3.20/clip) — kept for quotes pipeline
+};
 
 const MODELS = {
   fast: "veo-2.0-generate-001",          // Free tier / cheapest — default
@@ -59,9 +63,8 @@ export function pickAvailableModel() {
   const counts = getTodayUsage();
   for (const key of MODEL_PRIORITY) {
     const used = counts[key] || 0;
-    if (used < MAX_USES_PER_MODEL_PER_DAY) {
-      return key;
-    }
+    const max = MAX_USES_PER_MODEL[key] || 0;
+    if (used < max) return key;
   }
   return null; // All models exhausted
 }
@@ -115,7 +118,21 @@ export async function generateVideo(prompt, outputPath, options = {}) {
     config.resolution = options.resolution || "1080p";
   }
 
-  let operation = await ai.models.generateVideos({ model, prompt, config });
+  // Image-to-video: read file, base64-encode, attach to payload.
+  // Both Veo 2.0 and Veo 3.x accept this via the GenAI SDK.
+  const apiPayload = { model, prompt, config };
+  if (options.image) {
+    const imgBytes = readFileSync(options.image);
+    const lower = options.image.toLowerCase();
+    const ext = lower.endsWith(".png") ? "png" : "jpeg";
+    apiPayload.image = {
+      imageBytes: imgBytes.toString("base64"),
+      mimeType: `image/${ext}`,
+    };
+    console.log(`[Veo] Reference image: ${options.image}`);
+  }
+
+  let operation = await ai.models.generateVideos(apiPayload);
 
   // Poll until done
   let attempts = 0;
@@ -144,7 +161,7 @@ export async function generateVideo(prompt, outputPath, options = {}) {
   console.log(`[Veo] Video saved: ${outputPath}`);
   recordModelUse(modelKey);
   const counts = getTodayUsage();
-  console.log(`[Veo] Daily usage: ${MODEL_PRIORITY.map(k => `${k}=${counts[k] || 0}/${MAX_USES_PER_MODEL_PER_DAY}`).join(", ")}`);
+  console.log(`[Veo] Daily usage: ${MODEL_PRIORITY.map(k => `${k}=${counts[k] || 0}/${MAX_USES_PER_MODEL[k] || 0}`).join(", ")}`);
   return {
     path: outputPath,
     duration: 8,
@@ -206,4 +223,4 @@ function pickRandomStyle() {
   return styles[Math.floor(Math.random() * styles.length)];
 }
 
-export { MODELS, SCENE_STYLES, MODEL_PRIORITY };
+export { MODELS, SCENE_STYLES, MODEL_PRIORITY, MAX_USES_PER_MODEL };
