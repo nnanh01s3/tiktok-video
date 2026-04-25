@@ -6,6 +6,7 @@
  *   node src/shopee/reup.mjs --page gia_dung   # Đồ Gia Dụng (FB only)
  *   node src/shopee/reup.mjs --page tech        # Công Nghệ (FB only)
  *   node src/shopee/reup.mjs --list             # List available pages
+ *   node src/shopee/reup.mjs --page <key> --dry-run  # Inspect top-N without posting
  *
  * Flow:
  *  1. Shopee Affiliate API → products with video + commission
