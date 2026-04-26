@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from "fs";
 import { execSync, spawn } from "child_process";
 
 import Anthropic from "@anthropic-ai/sdk";
+import { generateVoiceover } from "./tts.js";
 
 const QUEUE_DIR = process.env.QUEUE_DIR || "./queue";
 const NICHE = "stories";
@@ -143,4 +144,24 @@ Chỉ trả về JSON thuần (không markdown fence, không meta-comment).`;
   }
 
   return parsed;
+}
+
+/**
+ * Generate voiceover with Puck voice + storyteller style instruction.
+ * Stories use dynamic pacing vs Tuệ Đàm's reflective Algenib.
+ *
+ * @param {string} script - full narration script (joined scenes)
+ * @param {string} outputPath - .mp3 file path
+ * @returns {Promise<{provider, path, sizeBytes}>}
+ */
+export async function genStoryVoiceover(script, outputPath) {
+  return generateVoiceover(script, outputPath, {
+    voice: "Puck",
+    style:
+      "Tell this story with passion and dynamic pacing. " +
+      "Slow at reflection, faster during action. " +
+      "Use dramatic pauses before key reveals. " +
+      "Build emotional crescendo to the turning point. " +
+      "Convey both struggle and triumph in your delivery.",
+  });
 }
