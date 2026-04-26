@@ -214,7 +214,12 @@ async function generateScene(scene, jobId, idx) {
   const clipPath = `${QUEUE_DIR}/${jobId}-scene${idx}.mp4`;
 
   // Imagen — only takes (prompt, outputPath); aspectRatio is fixed at 9:16 inside
-  await generateImage(scene.imagenPrompt, imgPath);
+  try {
+    await generateImage(scene.imagenPrompt, imgPath);
+  } catch (err) {
+    log(`❌ Scene ${idx + 1} Imagen failed: ${err.message}`);
+    throw err;
+  }
 
   // Pick Ken Burns effect deterministically by scene index (rotate)
   const effects = [
