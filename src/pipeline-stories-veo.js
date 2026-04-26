@@ -271,3 +271,156 @@ export async function generateAllScenes(scenes, jobId) {
   log(`All ${scenes.length} scene clips generated (Imagen)`);
   return paths;
 }
+
+/**
+ * Compose final story video: optional title slide → optional Veo hook → scene clips → audio.
+ *
+ * Strategy: simple xfade chain. Uses ffprobe to get exact duration of each clip, then
+ * computes cumulative xfade offsets. Audio is the single voiceover track (no per-scene
+ * audio mixing — stories are voiceover-driven, not ambient).
+ *
+ * @param {string[]} sceneClips - paths to N scene MP4s (each 1080x1920, durations from director)
+ * @param {string|null} hookClip - path to Veo hook MP4 (8s), or null if Veo skipped
+ * @param {string} audioPath - path to voiceover MP3
+ * @param {string} title - title text for opening slide
+ * @param {string} outputPath - final MP4 path
+ * @returns {Promise<{path: string, duration: number}>}
+ */
+export async function composeStoryVideo(sceneClips, hookClip, audioPath, title, outputPath) {
+  const N = sceneClips.length;
+  log(`Composing final story video (${N} scenes${hookClip ? " + Veo hook" : ""}${title ? " + title" : ""})...`);
+
+  // ffprobe duration helper (consistent with codebase style: -of csv=p=0)
+  function probeDuration(p) {
+    const out = execSync(
+      `ffprobe -v error -show_entries format=duration -of csv=p=0 "${p}"`,
+      { encoding: "utf8" }
+    );
+    return parseFloat(out.trim());
+  }
+
+  const TITLE_DURATION = 1.5;
+  const FADE_DURATION = 0.5;
+
+  // Build segment list in playback order.
+  // Each segment: { inputArgs, duration, filterPreamble(idx), streamLabel(idx) }
+  const segments = [];
+
+  // Segment 0 (optional): synthetic title slide via lavfi — no PNG asset needed.
+  // Dark navy background (0x1a1a2e) with white text in semi-transparent box.
+  if (title) {
+    const safeTitle = title.replace(/[':\\]/g, "").slice(0, 40);
+    // On Windows, FFmpeg fontfile paths need forward slashes and the colon escaped as \:
+    const fontPath = "./assets/fonts/Montserrat-Bold.ttf"
+      .replace(/\\/g, "/")
+      .replace(/:/g, "\\:");
+    segments.push({
+      inputArgs: [
+        "-f", "lavfi", "-t", String(TITLE_DURATION),
+        "-i", `color=c=0x1a1a2e:size=1080x1920:rate=30`,
+      ],
+      duration: TITLE_DURATION,
+      filterPreamble: (idx) =>
+        `[${idx}:v]drawtext=fontfile='${fontPath}':text='${safeTitle}'` +
+        `:fontcolor=white:fontsize=64:x=(w-text_w)/2:y=(h-text_h)/2` +
+        `:box=1:boxcolor=black@0.5:boxborderw=20[v${idx}]`,
+      streamLabel: (idx) => `v${idx}`,
+    });
+  }
+
+  // Segment (optional): Veo hook clip
+  if (hookClip) {
+    segments.push({
+      inputArgs: ["-i", hookClip],
+      duration: probeDuration(hookClip),
+      filterPreamble: (idx) =>
+        `[${idx}:v]scale=1080:1920:flags=bilinear,fps=30,setpts=PTS-STARTPTS[v${idx}]`,
+      streamLabel: (idx) => `v${idx}`,
+    });
+  }
+
+  // Scene clips
+  for (const clip of sceneClips) {
+    segments.push({
+      inputArgs: ["-i", clip],
+      duration: probeDuration(clip),
+      filterPreamble: (idx) =>
+        `[${idx}:v]scale=1080:1920:flags=bilinear,fps=30,setpts=PTS-STARTPTS[v${idx}]`,
+      streamLabel: (idx) => `v${idx}`,
+    });
+  }
+
+  if (segments.length === 0) {
+    throw new Error("composeStoryVideo: no segments to compose (no title, no hook, no scenes)");
+  }
+
+  // Voiceover audio is the LAST input
+  const audioIdx = segments.length;
+
+  // Flatten input args (each segment's args + the audio file at the end)
+  const inputs = [];
+  for (const s of segments) inputs.push(...s.inputArgs);
+  inputs.push("-i", audioPath);
+
+  // Build filter_complex:
+  // 1. Each segment's preamble normalizes its stream to [v0], [v1], [v2], ...
+  const filterParts = segments.map((s, i) => s.filterPreamble(i));
+
+  // 2. Cross-fade chain:
+  //    [v0][v1]xfade=transition=T:duration=0.5:offset=(seg0.duration - 0.5)[c1]
+  //    [c1][v2]xfade=transition=T:duration=0.5:offset=(seg0.dur + seg1.dur - 2*0.5)[c2]
+  //    ...
+  //    CORRECT xfade order: [outgoing][incoming] — prev FIRST, new SECOND.
+  const transitions = ["fade", "dissolve", "fadeblack", "wipeleft", "circleopen", "smoothup"];
+
+  let prevLabel = "v0";
+  let cumulativeOffset = segments[0].duration - FADE_DURATION;
+
+  for (let i = 1; i < segments.length; i++) {
+    const trans = transitions[(i - 1) % transitions.length];
+    const outLabel = i === segments.length - 1 ? "vout" : `c${i}`;
+    // [outgoing][incoming]xfade — outgoing (prevLabel) FIRST, incoming (v${i}) SECOND
+    filterParts.push(
+      `[${prevLabel}][v${i}]xfade=transition=${trans}:duration=${FADE_DURATION}:offset=${cumulativeOffset.toFixed(3)}[${outLabel}]`
+    );
+    prevLabel = outLabel;
+    cumulativeOffset += segments[i].duration - FADE_DURATION;
+  }
+
+  // Edge case: only 1 segment — no xfade chain, rename v0→vout via null filter
+  if (segments.length === 1) {
+    filterParts.push(`[v0]null[vout]`);
+  }
+
+  const filterComplex = filterParts.join(";");
+
+  // Total expected video duration (for logging)
+  const totalDuration =
+    segments.reduce((acc, s) => acc + s.duration, 0) -
+    FADE_DURATION * Math.max(0, segments.length - 1);
+
+  log(`  Expected video duration: ${totalDuration.toFixed(1)}s, ${segments.length} segments`);
+
+  const cmd = [
+    `"${FFMPEG}"`,
+    "-y",
+    ...inputs,
+    "-filter_complex", `"${filterComplex}"`,
+    "-map", `"[vout]"`,
+    "-map", `${audioIdx}:a`,
+    "-c:v", "libx264",
+    "-preset", "fast",
+    "-crf", "22",
+    "-pix_fmt", "yuv420p",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-shortest",
+    `"${outputPath}"`,
+  ].join(" ");
+
+  execSync(cmd, { stdio: "pipe" });
+
+  const actualDuration = probeDuration(outputPath);
+  log(`Final story video: ${actualDuration.toFixed(1)}s at ${outputPath}`);
+  return { path: outputPath, duration: actualDuration };
+}
