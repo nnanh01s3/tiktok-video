@@ -64,17 +64,24 @@ const DEFAULT_HASHTAGS = {
 //   tâm linh (2), nhân nghĩa (1), kiêu hãnh (1)
 // Sparse categories (≤2 quotes) will exhaust fast → fall back to general
 // pool. Future plan: seed more quotes for sparse categories (option B).
+// Order matters: dayOfYear % CATEGORIES.length picks index. Today
+// (27/4/2026, day 117) → index 7. To put HEALTHY categories at indices
+// 7-9 (today + next 2 days), sparse categories shift to indices 0-2.
+// Cycle: 7 healthy days (D 0-6) then 3 sparse days (D 7-9), then repeat.
+//
+// If sparse categories get seeded later (option B task), reorder again
+// or restore inventory-desc order.
 const CATEGORIES = [
-  "triết lý sống",
-  "trí tuệ",
-  "tự do",
-  "nghị lực",
-  "tình yêu",
-  "lãnh đạo",
-  "nhân sinh",
-  "tâm linh",
-  "nhân nghĩa",
-  "kiêu hãnh",
+  "tâm linh",      // idx 0 — sparse (2 quotes), fallback expected
+  "nhân nghĩa",    // idx 1 — exhausted (1 quote)
+  "kiêu hãnh",     // idx 2 — exhausted (1 quote)
+  "triết lý sống", // idx 3 — healthy 91
+  "trí tuệ",       // idx 4 — healthy 31
+  "tự do",         // idx 5 — healthy 18
+  "nghị lực",      // idx 6 — healthy 17
+  "tình yêu",      // idx 7 — healthy 16  ← today (D 117 % 10)
+  "lãnh đạo",      // idx 8 — healthy 14  ← tomorrow
+  "nhân sinh",     // idx 9 — healthy 13  ← D+2
 ];
 
 function log(msg) {
@@ -82,9 +89,17 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
+// Day-of-year rotation: same category 1 day, then advances. 10-day cycle.
+// Predictable rotation > random — user knows what tomorrow will be.
+// Override with --category="..." to force specific category.
+//
+// Same pattern as reels-config.mjs:pickSource() for consistency.
 function pickCategory() {
   if (CATEGORY) return CATEGORY;
-  return CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+  );
+  return CATEGORIES[dayOfYear % CATEGORIES.length];
 }
 
 function pickHashtags() {
