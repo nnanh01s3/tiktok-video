@@ -5,6 +5,7 @@
 import "../src/env.js";
 import assert from "node:assert/strict";
 import { existsSync, copyFileSync, unlinkSync } from "fs";
+import { genStoryDirector } from "../src/pipeline-stories-veo.js";
 
 // Use a temp DB to avoid polluting production
 const PROD_DB = "./data/content.db";
@@ -51,6 +52,26 @@ console.log(`✅ markStoryUsed: count ${beforeCount} → ${afterRow.used_count},
 const story2 = getNextStory();
 assert.notEqual(story2.id, story1.id, "after marking story1 used, getNextStory should return different story");
 console.log(`✅ Rotation: after marking #${story1.id}, next = #${story2.id}`);
+
+// 7. Director generates valid JSON for a real story
+console.log("\n--- Testing genStoryDirector (slow, ~30s) ---");
+const testStory = getNextStory({ type: "story" });
+console.log(`Generating director for: "${testStory.title}"`);
+const director = await genStoryDirector(testStory);
+
+assert.ok(director.title && director.title.length > 0, "director should have title");
+assert.ok(director.hook && director.hook.length > 0, "director should have hook");
+assert.ok(director.hookVeoPrompt && director.hookVeoPrompt.length > 0, "director should have Veo prompt");
+assert.ok(Array.isArray(director.scenes), "scenes should be array");
+assert.ok(director.scenes.length >= 3 && director.scenes.length <= 6, `scenes should be 3-6 (got ${director.scenes.length})`);
+for (const [i, s] of director.scenes.entries()) {
+  assert.ok(s.narration, `scene ${i} should have narration`);
+  assert.ok(s.imagenPrompt, `scene ${i} should have imagenPrompt`);
+  assert.ok(typeof s.duration === "number" && s.duration >= 20 && s.duration <= 40, `scene ${i} duration should be 20-40s (got ${s.duration})`);
+}
+console.log(`✅ Director generated ${director.scenes.length} scenes for "${testStory.title}"`);
+console.log(`   Hook: "${director.hook.slice(0, 80)}..."`);
+console.log(`   Veo prompt: "${director.hookVeoPrompt.slice(0, 80)}..."`);
 
 // Cleanup
 closeDb();
