@@ -94,6 +94,14 @@ export const CHARACTERS = {
     visualPrompt: "a slick weasel shopkeeper, sleek brown fur with cream belly, long slim body, sly confident smile, wearing a small green apron and a leaf-shaped name tag, cheerful salesman pose",
     negativePrompt: "human, person, realistic, scary, dark, low quality",
   },
+  "cô cú mèo": {
+    name: "Cô cú mèo",
+    role: "owl-teacher",
+    voice: "Leda", // Calm female — teacher voice
+    style: "Speak gentle, patient, warm teacher tone, slightly slow and clear pronunciation, Southern Vietnamese.",
+    visualPrompt: "a wise owl teacher, soft tawny brown feathers with cream chest, big round amber eyes, wearing small round glasses and a tiny pastel scarf, kind smile, perched in a teacher pose",
+    negativePrompt: "scary owl, dark, predator look, human, realistic, low quality",
+  },
 };
 
 /**
