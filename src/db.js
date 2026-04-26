@@ -347,3 +347,42 @@ export function getRecentSourceNames(pageName, limit = 5) {
     .all(pageName, limit);
   return new Set(rows.map((r) => r.source_name));
 }
+
+// --- content_library helpers (Tuệ Đàm stories pipeline) ---
+
+/**
+ * Pick the next story to post from content_library.
+ * Strategy: least used_count first; tie-break by oldest used_at (NULL treated as oldest).
+ * Filters: { id, type, category } — all optional, all AND-combined.
+ *
+ * @param {{id?: number, type?: 'story'|'book'|'concept', category?: string}} [filters]
+ * @returns {Object|null} story row, or null if no match
+ */
+export function getNextStory(filters = {}) {
+  const db = getDb();
+  let sql = `SELECT id, type, title, category, content_vi, lesson_vi,
+                    quote, quote_vi, author, year, metadata, used_count, used_at
+             FROM content_library WHERE 1=1`;
+  const params = [];
+  if (filters.id) { sql += ` AND id = ?`; params.push(filters.id); }
+  if (filters.type) { sql += ` AND type = ?`; params.push(filters.type); }
+  if (filters.category) { sql += ` AND category = ?`; params.push(filters.category); }
+  sql += ` ORDER BY used_count ASC, COALESCE(used_at, '1970-01-01') ASC LIMIT 1`;
+  return db.prepare(sql).get(...params) || null;
+}
+
+/**
+ * Mark a content_library story as used: increment used_count, set used_at = now.
+ * Idempotent: caller responsible for only calling AFTER successful upload.
+ *
+ * @param {number} id - content_library row id
+ */
+export function markStoryUsed(id) {
+  if (!id) return;
+  const db = getDb();
+  db.prepare(`
+    UPDATE content_library
+    SET used_count = used_count + 1, used_at = datetime('now')
+    WHERE id = ?
+  `).run(id);
+}
