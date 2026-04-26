@@ -40,17 +40,29 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
  * @returns {Promise<{actCount, title, hook, hookVeoPrompt, scenes, endQuote}>}
  */
 export async function genStoryDirector(story) {
-  const wordCount = (story.content_vi || "").split(/\s+/).filter(Boolean).length;
+  // Defense-in-depth: collapse newlines so story content can't break out of the prompt template
+  const safe = (s) => String(s ?? "").replace(/\r?\n+/g, " ").trim();
+  const safeStory = {
+    title: safe(story.title),
+    type: safe(story.type),
+    category: safe(story.category),
+    content_vi: safe(story.content_vi),
+    lesson_vi: safe(story.lesson_vi),
+    quote_vi: safe(story.quote_vi),
+    author: safe(story.author),
+  };
+
+  const wordCount = safeStory.content_vi.split(/\s+/).filter(Boolean).length;
 
   const prompt = `Bạn là director cho video kể chuyện 90-180s style Tuệ Đàm trên TikTok.
 
 CÂU CHUYỆN:
-- Tiêu đề: ${story.title}
-- Loại: ${story.type} (story / book / concept)
-- Danh mục: ${story.category}
-- Nội dung: ${story.content_vi} (${wordCount} từ)
-- Bài học: ${story.lesson_vi || "(không có)"}
-- Quote (nếu có): "${story.quote_vi || ""}" — ${story.author || ""}
+- Tiêu đề: ${safeStory.title}
+- Loại: ${safeStory.type} (story / book / concept)
+- Danh mục: ${safeStory.category}
+- Nội dung: ${safeStory.content_vi} (${wordCount} từ)
+- Bài học: ${safeStory.lesson_vi || "(không có)"}
+- Quote (nếu có): "${safeStory.quote_vi || ""}" — ${safeStory.author || ""}
 
 TẠO JSON với schema EXACT:
 {
@@ -92,27 +104,42 @@ QUY TẮC imagenPrompt:
 
 Chỉ trả về JSON thuần (không markdown fence, không meta-comment).`;
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 4000,
-    messages: [{ role: "user", content: prompt }],
-  });
+  let parsed;
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 4000,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const text = response?.content?.[0]?.text?.trim();
+    if (!text) throw new Error("Claude returned empty content");
+    // Strip markdown fence if Claude wrapped it (handles ```json, ```, with/without trailing newlines)
+    const json = text
+      .replace(/^[\s\n]*```(?:json)?\s*\n?/i, "")
+      .replace(/\n?\s*```\s*$/i, "")
+      .trim();
+    parsed = JSON.parse(json);
+  } catch (err) {
+    log(`❌ genStoryDirector failed: ${err.message}`);
+    throw err;
+  }
 
-  const text = response.content[0].text.trim();
-  // Strip markdown fence if Claude wrapped it
-  const json = text.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-  const parsed = JSON.parse(json);
-
-  // Sanity-check actCount matches scenes array length
-  if (parsed.actCount !== parsed.scenes.length) {
-    log(`⚠ actCount ${parsed.actCount} ≠ scenes.length ${parsed.scenes.length}, using scenes.length`);
-    parsed.actCount = parsed.scenes.length;
+  // Validate scenes array
+  if (!Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
+    throw new Error(`Director returned no scenes (got ${parsed.scenes?.length ?? "undefined"})`);
+  }
+  if (parsed.scenes.length < 3) {
+    throw new Error(`Director returned only ${parsed.scenes.length} scenes (minimum 3 per spec)`);
   }
   // Cap absolute 6 scenes
   if (parsed.scenes.length > 6) {
     log(`⚠ scenes truncated from ${parsed.scenes.length} to 6`);
     parsed.scenes = parsed.scenes.slice(0, 6);
-    parsed.actCount = 6;
+  }
+  // Force actCount to match real scenes length
+  if (parsed.actCount !== parsed.scenes.length) {
+    log(`⚠ actCount ${parsed.actCount} ≠ scenes.length ${parsed.scenes.length}, using scenes.length`);
+    parsed.actCount = parsed.scenes.length;
   }
 
   return parsed;
