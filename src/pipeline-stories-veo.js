@@ -26,6 +26,16 @@ import { generateVideo, pickAvailableModel } from "./veo.js";
 import { generateImage } from "./imagen.js";
 import { createPoster } from "./social-poster.js";
 import { TIKTOK_QUOTES_CONFIG } from "./shopee/config.mjs";
+import { getNextStory, markStoryUsed } from "./db.js";
+
+// --- CLI argument parsing ---
+const DRY_RUN = process.argv.includes("--dry-run");
+const STEP = process.argv.find((a) => a.startsWith("--step="))?.split("=")[1];
+const DELAY_MIN = parseInt(process.argv.find((a) => a.startsWith("--delay="))?.split("=")[1] || "1", 10);
+const STORY_ID = parseInt(process.argv.find((a) => a.startsWith("--story-id="))?.split("=")[1] || "0", 10) || null;
+const TYPE_FILTER = process.argv.find((a) => a.startsWith("--type="))?.split("=")[1] || null;
+const CATEGORY_FILTER = process.argv.find((a) => a.startsWith("--category="))?.split("=")[1] || null;
+const SKIP_VEO_HOOK = process.argv.includes("--no-veo-hook");
 
 const QUEUE_DIR = process.env.QUEUE_DIR || "./queue";
 const NICHE = "stories";
@@ -486,4 +496,101 @@ export async function uploadAndSchedule(videoPath, caption, delayMin) {
   const postId = result?.postId || result?.postIds?.[0];
   log(`Scheduled: post ${postId} at ${scheduledAt}`);
   return { postId, scheduledAt };
+}
+
+/**
+ * Main orchestrator — wires all pipeline stages end-to-end.
+ * Controlled by CLI flags: --dry-run, --step=, --story-id=, --type=, --category=,
+ * --delay=, --no-veo-hook.
+ */
+export async function runPipeline() {
+  const jobId = `story-${Date.now()}-${randomUUID().slice(0, 8)}`;
+  log(`=== Story Pipeline Start: ${jobId} ===`);
+
+  // Step 1: Pick story
+  const story = getNextStory({
+    id: STORY_ID,
+    type: TYPE_FILTER,
+    category: CATEGORY_FILTER,
+  });
+  if (!story) {
+    log(`❌ No story found matching filters (id=${STORY_ID}, type=${TYPE_FILTER}, category=${CATEGORY_FILTER})`);
+    process.exit(1);
+  }
+  log(`Story #${story.id}: "${story.title}" [${story.type}/${story.category}, used_count=${story.used_count}]`);
+
+  if (!existsSync(QUEUE_DIR)) mkdirSync(QUEUE_DIR, { recursive: true });
+
+  // Step 2: Director
+  log(`Step 2: Generating director script...`);
+  const director = await genStoryDirector(story);
+  log(`Script: ${director.scenes.length} scenes, hook: "${director.hook.slice(0, 60)}..."`);
+  writeFileSync(`${QUEUE_DIR}/${jobId}-director.json`, JSON.stringify(director, null, 2));
+  log(`Director saved: ${QUEUE_DIR}/${jobId}-director.json`);
+
+  if (DRY_RUN) {
+    log(`✅ Dry-run complete (--dry-run flag)`);
+    return { success: true, jobId, dryRun: true, director };
+  }
+  if (STEP === "director") return { success: true, jobId, director };
+
+  // Step 3: Voiceover (Puck)
+  log(`Step 3: Generating voiceover (Puck)...`);
+  const fullScript = director.scenes.map((s) => s.narration).join(" ");
+  const audioPath = `${QUEUE_DIR}/${jobId}-voice.mp3`;
+  await genStoryVoiceover(fullScript, audioPath);
+  log(`Voiceover: ${Math.round(statSync(audioPath).size / 1024)}KB`);
+  if (STEP === "voiceover") return { success: true, jobId, audioPath };
+
+  // Step 4a: Veo hook
+  let hookClip = null;
+  if (!SKIP_VEO_HOOK) {
+    hookClip = await genVeoHook(director.hookVeoPrompt, jobId);
+  }
+  if (STEP === "veo") return { success: true, jobId, hookClip };
+
+  // Step 4b: Imagen scenes
+  log(`Step 4b: Generating ${director.scenes.length} scene clips...`);
+  const sceneClips = await generateAllScenes(director.scenes, jobId);
+  if (STEP === "imagen") return { success: true, jobId, sceneClips };
+
+  // Step 5: Compose
+  log(`Step 5: Composing final video...`);
+  const finalPath = `${QUEUE_DIR}/${jobId}.mp4`;
+  const { duration } = await composeStoryVideo(sceneClips, hookClip, audioPath, director.title, finalPath);
+  if (STEP === "compose") return { success: true, jobId, finalPath, duration };
+
+  // Step 6: Upload + schedule
+  log(`Step 6: Uploading to PostForMe...`);
+  const caption = genStoryCaption(director, story);
+  const { postId, scheduledAt } = await uploadAndSchedule(finalPath, caption, DELAY_MIN);
+
+  // Step 7: Mark story used (only after successful upload)
+  markStoryUsed(story.id);
+
+  log(`=== Pipeline Complete: ${jobId} ===`);
+  return {
+    success: true,
+    jobId,
+    postId,
+    storyId: story.id,
+    storyTitle: story.title,
+    videoPath: finalPath,
+    duration,
+    category: story.category,
+    estimatedCost: `~$${((director.scenes.length * 0.015) + 0.03).toFixed(2)}`,
+  };
+}
+
+// CLI entry point (triple-slash prefix required on Windows: file:///D:/...)
+if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, "/")}`) {
+  runPipeline()
+    .then((result) => {
+      console.log("\nResult:", JSON.stringify(result, null, 2));
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error("\n❌ Pipeline failed:", err);
+      process.exit(1);
+    });
 }
