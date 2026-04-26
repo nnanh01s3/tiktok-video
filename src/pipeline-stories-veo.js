@@ -22,9 +22,12 @@ import { execSync, spawn } from "child_process";
 
 import Anthropic from "@anthropic-ai/sdk";
 import { generateVoiceover } from "./tts.js";
+import { generateVideo, pickAvailableModel } from "./veo.js";
+import { generateImage } from "./imagen.js";
 
 const QUEUE_DIR = process.env.QUEUE_DIR || "./queue";
 const NICHE = "stories";
+const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 
 function log(msg) {
   const ts = new Date().toISOString().slice(11, 19);
@@ -164,4 +167,102 @@ export async function genStoryVoiceover(script, outputPath) {
       "Build emotional crescendo to the turning point. " +
       "Convey both struggle and triumph in your delivery.",
   });
+}
+
+/**
+ * Generate Veo 8s hook clip from director's hookVeoPrompt.
+ * Uses cheapest available Veo tier (cascading fallback).
+ * Returns null if all Veo quotas exhausted (graceful degradation).
+ *
+ * @param {string} hookPrompt - from director output
+ * @param {string} jobId
+ * @returns {Promise<string|null>} path to MP4, or null
+ */
+export async function genVeoHook(hookPrompt, jobId) {
+  const veoModel = pickAvailableModel();
+  if (!veoModel) {
+    log(`⚠ All Veo quotas exhausted, skipping hook clip`);
+    return null;
+  }
+  log(`Step: Generating Veo hook clip (8s) with model: ${veoModel}...`);
+  const hookPath = `${QUEUE_DIR}/${jobId}-hook.mp4`;
+  try {
+    await generateVideo(hookPrompt, hookPath, {
+      model: veoModel,
+      aspectRatio: "9:16",
+      resolution: "1080p",
+    });
+    log(`Hook clip generated: ${hookPath}`);
+    return hookPath;
+  } catch (err) {
+    log(`⚠ Veo hook failed: ${err.message}. Proceeding without hook.`);
+    return null;
+  }
+}
+
+/**
+ * Generate Imagen image + Ken Burns motion clip for one scene.
+ *
+ * @param {Object} scene - { imagenPrompt, duration }
+ * @param {string} jobId
+ * @param {number} idx - 0-indexed
+ * @returns {Promise<string>} path to scene MP4
+ */
+async function generateScene(scene, jobId, idx) {
+  log(`  Imagen + Ken Burns clip ${idx + 1}...`);
+  const imgPath = `${QUEUE_DIR}/${jobId}-scene${idx}.png`;
+  const clipPath = `${QUEUE_DIR}/${jobId}-scene${idx}.mp4`;
+
+  // Imagen — only takes (prompt, outputPath); aspectRatio is fixed at 9:16 inside
+  await generateImage(scene.imagenPrompt, imgPath);
+
+  // Pick Ken Burns effect deterministically by scene index (rotate)
+  const effects = [
+    "zoom_in_center", "zoom_out_reveal", "zoom_pan_right", "zoom_pan_up",
+    "parallax_zoom_in", "parallax_zoom_out", "parallax_drift_right", "zoom_breathe",
+  ];
+  const effect = effects[idx % effects.length];
+
+  // FFmpeg Ken Burns (zoompan) — simplified single-layer per plan
+  const fps = 30;
+  const frames = scene.duration * fps;
+  let filter;
+  if (effect.startsWith("zoom_in")) {
+    filter = `zoompan=z='min(zoom+0.0008,1.3)':d=${frames}:s=1080x1920:fps=${fps}`;
+  } else if (effect.startsWith("zoom_out")) {
+    filter = `zoompan=z='if(eq(on,0),1.3,max(zoom-0.0008,1.0))':d=${frames}:s=1080x1920:fps=${fps}`;
+  } else if (effect === "zoom_pan_right" || effect === "parallax_drift_right") {
+    filter = `zoompan=z='1.15':x='if(gte(zoom,1.0),x+1,x)':d=${frames}:s=1080x1920:fps=${fps}`;
+  } else {
+    // Default: gentle drift in
+    filter = `zoompan=z='1+0.0005*on':d=${frames}:s=1080x1920:fps=${fps}`;
+  }
+
+  execSync(
+    `"${FFMPEG}" -y -loop 1 -i "${imgPath}" -vf "${filter}" -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p -t ${scene.duration} "${clipPath}"`,
+    { stdio: "pipe" }
+  );
+  log(`    Effect: ${effect} (single)`);
+
+  // Cleanup PNG (no longer needed)
+  try { unlinkSync(imgPath); } catch {}
+
+  return clipPath;
+}
+
+/**
+ * Generate all scene clips (3-6).
+ *
+ * @param {Array} scenes - director.scenes
+ * @param {string} jobId
+ * @returns {Promise<string[]>} paths to scene MP4s in order
+ */
+export async function generateAllScenes(scenes, jobId) {
+  const paths = [];
+  for (let i = 0; i < scenes.length; i++) {
+    const path = await generateScene(scenes[i], jobId, i);
+    paths.push(path);
+  }
+  log(`All ${scenes.length} scene clips generated (Imagen)`);
+  return paths;
 }
