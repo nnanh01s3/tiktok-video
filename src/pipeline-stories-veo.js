@@ -452,12 +452,16 @@ export function genStoryCaption(director, story) {
   const tags = `${shuffled.join(" ")} #trendingvideo #trend`;
 
   const lessonLine = (story.lesson_vi || "").slice(0, 120);
-  const caption = [
+  const contentOnly = [
     director.hook,
     lessonLine ? `\n${lessonLine}` : "",
-    `\n\n${tags}`,
   ].join("");
-  return caption.slice(0, 2000); // TikTok caption limit
+
+  // Reserve room for hashtags (and "\n\n" separator) so they survive 2000-char cap
+  const maxContentLen = Math.max(0, 2000 - tags.length - 2);
+  const slicedContent = contentOnly.slice(0, maxContentLen);
+
+  return `${slicedContent}\n\n${tags}`;
 }
 
 /**
