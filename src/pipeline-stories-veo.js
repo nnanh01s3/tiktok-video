@@ -309,7 +309,7 @@ export async function composeStoryVideo(sceneClips, hookClip, audioPath, title, 
   // Segment 0 (optional): synthetic title slide via lavfi — no PNG asset needed.
   // Dark navy background (0x1a1a2e) with white text in semi-transparent box.
   if (title) {
-    const safeTitle = title.replace(/[':\\]/g, "").slice(0, 40);
+    const safeTitle = title.replace(/[':\\%\[\]]/g, "").slice(0, 40);
     // On Windows, FFmpeg fontfile paths need forward slashes and the colon escaped as \:
     const fontPath = "./assets/fonts/Montserrat-Bold.ttf"
       .replace(/\\/g, "/")
@@ -417,6 +417,13 @@ export async function composeStoryVideo(sceneClips, hookClip, audioPath, title, 
     "-shortest",
     `"${outputPath}"`,
   ].join(" ");
+
+  // Warn if audio/video durations diverge significantly — `-shortest` will clip
+  const audioDuration = probeDuration(audioPath);
+  const drift = Math.abs(audioDuration - totalDuration);
+  if (drift > 2) {
+    log(`⚠ Audio ${audioDuration.toFixed(1)}s vs video ${totalDuration.toFixed(1)}s (drift ${drift.toFixed(1)}s) — \`-shortest\` will clip`);
+  }
 
   execSync(cmd, { stdio: "pipe" });
 
