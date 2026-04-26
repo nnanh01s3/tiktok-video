@@ -207,7 +207,7 @@ export async function genVeoHook(hookPrompt, jobId) {
     log(`Hook clip generated: ${hookPath}`);
     return hookPath;
   } catch (err) {
-    log(`⚠ Veo hook failed: ${err.message}. Proceeding without hook.`);
+    log(`⚠ Veo hook failed (model=${veoModel}): ${err.message}. Proceeding without hook.`);
     return null;
   }
 }
