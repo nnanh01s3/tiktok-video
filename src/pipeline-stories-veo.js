@@ -24,6 +24,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { generateVoiceover } from "./tts.js";
 import { generateVideo, pickAvailableModel } from "./veo.js";
 import { generateImage } from "./imagen.js";
+import { createPoster } from "./social-poster.js";
+import { TIKTOK_QUOTES_CONFIG } from "./shopee/config.mjs";
 
 const QUEUE_DIR = process.env.QUEUE_DIR || "./queue";
 const NICHE = "stories";
@@ -430,4 +432,54 @@ export async function composeStoryVideo(sceneClips, hookClip, audioPath, title, 
   const actualDuration = probeDuration(outputPath);
   log(`Final story video: ${actualDuration.toFixed(1)}s at ${outputPath}`);
   return { path: outputPath, duration: actualDuration };
+}
+
+/**
+ * Generate TikTok caption for a story post.
+ * Hook (1-2 lines from director) + body (lesson) + hashtags.
+ *
+ * @param {Object} director - from genStoryDirector()
+ * @param {Object} story - content library entry
+ * @returns {string} caption (max 2000 chars, ends with #trendingvideo #trend)
+ */
+export function genStoryCaption(director, story) {
+  const hashtagPool = [
+    "#cauchuyen", "#cauchuyencothat", "#nghilucsong", "#camhung",
+    "#thanhcong", "#tinhthantruyencam", "#vuotkho", "#fyp",
+  ];
+  // Pick 5 random + always end with rules from feedback_caption_hashtags.md
+  const shuffled = [...hashtagPool].sort(() => Math.random() - 0.5).slice(0, 5);
+  const tags = `${shuffled.join(" ")} #trendingvideo #trend`;
+
+  const lessonLine = (story.lesson_vi || "").slice(0, 120);
+  const caption = [
+    director.hook,
+    lessonLine ? `\n${lessonLine}` : "",
+    `\n\n${tags}`,
+  ].join("");
+  return caption.slice(0, 2000); // TikTok caption limit
+}
+
+/**
+ * Upload final video and schedule TikTok post.
+ * Uses same Tuệ Đàm account (TIKTOK_QUOTES_CONFIG).
+ *
+ * @param {string} videoPath - path to final MP4
+ * @param {string} caption - from genStoryCaption()
+ * @param {number} delayMin - minutes from now to schedule
+ * @returns {Promise<{postId, scheduledAt}>}
+ */
+export async function uploadAndSchedule(videoPath, caption, delayMin) {
+  const poster = createPoster(TIKTOK_QUOTES_CONFIG);
+  const mediaRef = await poster.upload(videoPath);
+  log(`Uploaded: ${mediaRef.slice(0, 60)}`);
+
+  const scheduledAt = new Date(Date.now() + delayMin * 60_000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, ".000Z");
+
+  const result = await poster.scheduleTikTok({ mediaRef, caption, scheduledAt });
+  const postId = result?.postId || result?.postIds?.[0];
+  log(`Scheduled: post ${postId} at ${scheduledAt}`);
+  return { postId, scheduledAt };
 }
