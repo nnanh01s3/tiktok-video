@@ -52,17 +52,29 @@ const DEFAULT_HASHTAGS = {
   niche_small: ["#caungoncuocsong", "#trietlysong", "#phattrienbantan", "#tuduytichcuc", "#ngontinh"],
 };
 
+// Synced 27/4/2026 to match actual quotes_v2 categories in DB.
+// Previously labels were aspirational (e.g. "thành công và tham vọng") but
+// quotes_v2 only contains "triết lý sống / trí tuệ / tự do / nghị lực / ...".
+// Result: 9/10 picks fell through getUnusedQuotes fallback, picking from
+// "triết lý sống" pool. Now 1:1 mapping → category log = reality.
+//
+// Quote inventory per category (as of 27/4):
+//   triết lý sống (91), trí tuệ (31), tự do (18), nghị lực (17),
+//   tình yêu (16), lãnh đạo (14), nhân sinh (13),
+//   tâm linh (2), nhân nghĩa (1), kiêu hãnh (1)
+// Sparse categories (≤2 quotes) will exhaust fast → fall back to general
+// pool. Future plan: seed more quotes for sparse categories (option B).
 const CATEGORIES = [
-  "thành công và tham vọng",
-  "kỷ luật và thói quen",
-  "sức mạnh tinh thần",
-  "vượt qua thất bại",
-  "phát triển bản thân",
   "triết lý sống",
-  "tư duy tài chính",
-  "lãnh đạo và ảnh hưởng",
-  "quản lý thời gian",
-  "trí tuệ cảm xúc",
+  "trí tuệ",
+  "tự do",
+  "nghị lực",
+  "tình yêu",
+  "lãnh đạo",
+  "nhân sinh",
+  "tâm linh",
+  "nhân nghĩa",
+  "kiêu hãnh",
 ];
 
 function log(msg) {
