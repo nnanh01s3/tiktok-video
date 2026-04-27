@@ -70,6 +70,9 @@ export const REELS_SOURCES = {
     { name: "Schannel",          platform: "tiktok",   url: "https://www.tiktok.com/@schannelvn" },        // daily, 3M, CellphoneS tech media, high engagement
     { name: "Di Động Việt",    platform: "tiktok",   url: "https://www.tiktok.com/@didongviet_official" }, // daily, phone retailer reviews
     { name: "Kenh14",            platform: "facebook", url: "https://www.facebook.com/Kenh14" },            // multi/day, tech trending
+    // ── ADDED 2026-04-27: high-bitrate replacements (existing sources serve <1MB) ──
+    { name: "Khôi Ngọng",       platform: "tiktok",   url: "https://www.tiktok.com/@khoingong" },          // daily, tech reviewer (phones, tablets, tripods), 11+ MB
+    { name: "Hải Triều Mobile", platform: "tiktok",   url: "https://www.tiktok.com/@haitrieumobile" },     // daily, phone retailer (iPhone, accessories), 11+ MB
   ],
 
   // ── sac_dep (Mỹ Phẩm) — skincare, beauty, makeup ──
