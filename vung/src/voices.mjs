@@ -94,6 +94,14 @@ export const CHARACTERS = {
     visualPrompt: "a slick weasel shopkeeper, sleek brown fur with cream belly, long slim body, sly confident smile, wearing a small green apron and a leaf-shaped name tag, cheerful salesman pose",
     negativePrompt: "human, person, realistic, scary, dark, low quality",
   },
+  "bạn nhỏ": {
+    name: "Bạn nhỏ",
+    role: "young-bird",
+    voice: "Zephyr", // Bright, youthful — small scared bird
+    style: "Speak small, slightly trembling, scared but hopeful, young child voice, Southern Vietnamese.",
+    visualPrompt: "a small fledgling bird, fluffy yellow and pale-blue feathers, oversized round eyes filled with worry, tiny wings, perched timidly on a stone",
+    negativePrompt: "scary, dark, predator, human, realistic, low quality",
+  },
   "cô cú mèo": {
     name: "Cô cú mèo",
     role: "owl-teacher",
