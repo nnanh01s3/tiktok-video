@@ -37,10 +37,12 @@ export const REELS_SOURCES = {
     { name: "Đồ Độc Lạ",       platform: "facebook", url: "https://www.facebook.com/profile.php?id=61576726414275" },
     { name: "Thánh Mẹo VN",    platform: "facebook", url: "https://www.facebook.com/thanhmeo.vn" },
     { name: "Mẹo Vặt",         platform: "facebook", url: "https://www.facebook.com/meohay" },
-    { name: "Duy Luân",         platform: "tiktok",   url: "https://www.tiktok.com/@duyluandethuong" },
+    { name: "Duy Luân",         platform: "tiktok",   url: "https://www.tiktok.com/@duyluandethuong" },    // NOTE: drifted to tech reviews (phones, laptops) — mostly off-topic for shopee niche
     // ── NEW: high-frequency ──
-    { name: "HiisMe Store",     platform: "tiktok",   url: "https://www.tiktok.com/@hiisme.store" },       // daily, smart gadget compilations
-    { name: "Đạt Đung Đưa",    platform: "tiktok",   url: "https://www.tiktok.com/@datdungdua" },          // daily, gadget tips 659K
+    { name: "HiisMe Store",     platform: "tiktok",   url: "https://www.tiktok.com/@hiisme.store" },       // NOTE: drifted to skincare/lifestyle — mostly off-topic for shopee niche
+    { name: "Đạt Đung Đưa",    platform: "tiktok",   url: "https://www.tiktok.com/@datdungdua" },          // NOTE: drifted to iPhone tips — mostly off-topic for shopee niche
+    // ── ADDED 2026-05-01: high-bitrate replacement after 3x consecutive 0/N (drift on existing) ──
+    { name: "Review That Vn",   platform: "tiktok",   url: "https://www.tiktok.com/@reviewthat.vn" },      // gadget novelty (LED pháo hoa, đồ Tết), 8+ MB raw, on-niche
   ],
 
   // ── gia_dung (Đồ Gia Dụng) — kitchen, smart home, appliances ──
