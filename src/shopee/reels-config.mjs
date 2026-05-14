@@ -79,11 +79,10 @@ export const REELS_SOURCES = {
 
   // ── sac_dep (Mỹ Phẩm) — skincare, beauty, makeup ──
   sac_dep: [
-    { name: "Võ Hà Linh",        platform: "tiktok",   url: "https://www.tiktok.com/@halinhofficial" },
+    // REMOVED 2026-05-14: Võ Hà Linh sources (vi phạm bản quyền per user request)
     { name: "Trinh Phạm",        platform: "tiktok",   url: "https://www.tiktok.com/@trinhpham2222" },
     { name: "Chloe Nguyễn",      platform: "tiktok",   url: "https://www.tiktok.com/@bychloenguyen" },
     { name: "Rư Skincare",       platform: "tiktok",   url: "https://www.tiktok.com/@goc.cua.ru" },
-    { name: "Võ Hà Linh Beauty", platform: "facebook", url: "https://www.facebook.com/vohalinh.beauty" },
     // ── NEW: high-frequency ──
     { name: "Lê Khánh Huyền",    platform: "tiktok",   url: "https://www.tiktok.com/@lethikhanhhuyen2004" }, // daily+, 7.5M, #1 beauty VN
     { name: "Cim Ngân",           platform: "tiktok",   url: "https://www.tiktok.com/@cimngan0503" },        // daily, 2.2M, 631K avg views
