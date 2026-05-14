@@ -89,6 +89,9 @@ export const REELS_SOURCES = {
     { name: "Vanmiu Beauty",     platform: "tiktok",   url: "https://www.tiktok.com/@vanmiu_beauty" },      // daily, 1.2M, pro makeup tutorials
     { name: "Trần Oanh",         platform: "tiktok",   url: "https://www.tiktok.com/@tranoanh4451" },       // daily, 1.4M, skincare routines
     { name: "ELLE Vietnam",      platform: "facebook", url: "https://www.facebook.com/ELLEVietnam" },       // daily+, editorial beauty Reels
+    // ── ADDED 2026-05-14: replacement for removed Võ Hà Linh sources ──
+    { name: "Phương Thảo Makeup", platform: "tiktok",   url: "https://www.tiktok.com/@phuongthao.makeup" }, // daily, makeup tutorials, 6+ MB raw bitrate
+    { name: "Shiseido Vietnam",  platform: "tiktok",   url: "https://www.tiktok.com/@shiseido.vietnam" },  // weekly, official brand (phấn má, highlight, skincare)
   ],
 
   // ── thoi_trang (Thời Trang) — outfit, street style ──
