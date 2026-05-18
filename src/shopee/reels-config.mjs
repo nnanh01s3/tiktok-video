@@ -43,6 +43,10 @@ export const REELS_SOURCES = {
     { name: "Đạt Đung Đưa",    platform: "tiktok",   url: "https://www.tiktok.com/@datdungdua" },          // NOTE: drifted to iPhone tips — mostly off-topic for shopee niche
     // ── ADDED 2026-05-01: high-bitrate replacement after 3x consecutive 0/N (drift on existing) ──
     { name: "Review That Vn",   platform: "tiktok",   url: "https://www.tiktok.com/@reviewthat.vn" },      // gadget novelty (LED pháo hoa, đồ Tết), 8+ MB raw, on-niche
+    // ── ADDED 2026-05-18: high-view rotation expansion (only 3 confirmed — niche is sparse, see notes) ──
+    { name: "Nhi Thỏ",                  platform: "tiktok", url: "https://www.tiktok.com/@nhitho2000" },          // daily, smart-home/đồ công nghệ tiện ích, 811K+, 40 MB raw
+    { name: "Lãng Tử Đào Hoa TQ",      platform: "tiktok", url: "https://www.tiktok.com/@langtudaohoatq" },      // daily, quirky/độc-lạ product reviews, 300K+, 28 MB raw
+    { name: "Mê Đồ Gia Dụng Tiện Ích", platform: "tiktok", url: "https://www.tiktok.com/@medogiadungtienich6" }, // daily, gadget/tiện ích review (also in gia_dung), 9 MB raw
   ],
 
   // ── gia_dung (Đồ Gia Dụng) — kitchen, smart home, appliances ──
@@ -59,6 +63,11 @@ export const REELS_SOURCES = {
     { name: "Smart Gadgets Tiện Ích",  platform: "facebook", url: "https://www.facebook.com/smartgadgets.tienichthongminh" }, // FB fallback
     { name: "Đồ Gia Dụng Thế Hệ Mới",  platform: "facebook", url: "https://www.facebook.com/smart.dogiadung.vn" },     // FB fallback
     { name: "Bách Hóa Xanh",           platform: "facebook", url: "https://www.facebook.com/bachhoaxanh" },            // FB fallback — grocery chain
+    // ── ADDED 2026-05-18: high-view rotation expansion (verified active + bitrate ≥500 kbps) ──
+    { name: "Điện Máy Phú Quý",       platform: "tiktok",   url: "https://www.tiktok.com/@dienmayphuquy" },           // daily, electronics/appliance retailer, ~2.35 Mbps
+    { name: "Đồ Gia Dụng Nhập Khẩu",  platform: "tiktok",   url: "https://www.tiktok.com/@dogiadungnhapkhau" },       // daily, imported kitchen/home gadgets, ~1.05 Mbps
+    { name: "Dreame Việt Nam",         platform: "tiktok",   url: "https://www.tiktok.com/@dreame.vietnam" },          // daily, official brand (robot vacuum, smart cleaning), ~956 kbps
+    { name: "Philips Việt Nam",        platform: "tiktok",   url: "https://www.tiktok.com/@philips.vietnam" },         // daily, official brand (air fryer, blender, vacuum), ~647 kbps
   ],
 
   // ── tech (Đồ Công Nghệ) — gadgets, phone, reviews ──
@@ -75,6 +84,15 @@ export const REELS_SOURCES = {
     // ── ADDED 2026-04-27: high-bitrate replacements (existing sources serve <1MB) ──
     { name: "Khôi Ngọng",       platform: "tiktok",   url: "https://www.tiktok.com/@khoingong" },          // daily, tech reviewer (phones, tablets, tripods), 11+ MB
     { name: "Hải Triều Mobile", platform: "tiktok",   url: "https://www.tiktok.com/@haitrieumobile" },     // daily, phone retailer (iPhone, accessories), 11+ MB
+    // ── ADDED 2026-05-18: wide tech expansion (user request — tech niche has many sources) ──
+    { name: "Vật Vờ Studio",   platform: "tiktok",   url: "https://www.tiktok.com/@vatvostudio" },        // daily, top VN tech reviewer (phone/laptop), 12.8 MB raw
+    { name: "Điện Thoại Vui",  platform: "tiktok",   url: "https://www.tiktok.com/@dienthoaivui" },       // daily, phone retailer/repair tech tips, 11.9 MB raw
+    { name: "Tinh Tế",          platform: "tiktok",   url: "https://www.tiktok.com/@tinhte.vn" },          // daily, #1 VN tech community/media, 9.4 MB raw
+    { name: "GenK",             platform: "tiktok",   url: "https://www.tiktok.com/@genk.vn" },            // daily, tech news media, 7.4 MB raw
+    { name: "Techcare",         platform: "tiktok",   url: "https://www.tiktok.com/@techcare.vn" },        // daily, tech retailer reviews, 6.2 MB raw
+    { name: "Phong Vũ",        platform: "tiktok",   url: "https://www.tiktok.com/@phongvu.official" },   // daily, PC/laptop retailer reviews, 6.2 MB raw
+    { name: "Tech Review VN",   platform: "tiktok",   url: "https://www.tiktok.com/@techreview.vn" },      // daily, gadget reviews, 3.6 MB raw
+    { name: "FPT Shop",         platform: "tiktok",   url: "https://www.tiktok.com/@fptshop.official" },   // daily, electronics retailer, 3.2 MB raw
   ],
 
   // ── sac_dep (Mỹ Phẩm) — skincare, beauty, makeup ──
@@ -92,6 +110,11 @@ export const REELS_SOURCES = {
     // ── ADDED 2026-05-14: replacement for removed Võ Hà Linh sources ──
     { name: "Phương Thảo Makeup", platform: "tiktok",   url: "https://www.tiktok.com/@phuongthao.makeup" }, // daily, makeup tutorials, 6+ MB raw bitrate
     { name: "Shiseido Vietnam",  platform: "tiktok",   url: "https://www.tiktok.com/@shiseido.vietnam" },  // weekly, official brand (phấn má, highlight, skincare)
+    // ── ADDED 2026-05-18: high-view rotation expansion (verified active + bitrate) ──
+    { name: "HannahOlala",       platform: "tiktok",   url: "https://www.tiktok.com/@hannaholala" },        // daily, beauty/skincare KOL (founder Candid Skincare), 16.6 MB raw
+    { name: "Tom Skincare",      platform: "tiktok",   url: "https://www.tiktok.com/@tomskincare" },        // daily, minimalist skincare routines/reviews, 8.4 MB raw
+    { name: "Hoàng Minh Ngọc",  platform: "tiktok",   url: "https://www.tiktok.com/@hoangminhngoc21" },    // daily, Gen Z beauty (makeup, mỹ phẩm), ~1.1M, 6.2 MB raw
+    { name: "HTX Beauty",        platform: "tiktok",   url: "https://www.tiktok.com/@htxbeauty.lc" },       // daily, beauty-blogger collective (makeup/skincare/son), 12.9 MB raw
   ],
 
   // ── thoi_trang (Thời Trang) — outfit, street style ──
@@ -105,6 +128,11 @@ export const REELS_SOURCES = {
     { name: "Ngọc Matcha",       platform: "tiktok", url: "https://www.tiktok.com/@ngoc.matcha" },         // daily, 4.3M, OOTD aesthetics
     { name: "BYB Academy VN",    platform: "tiktok", url: "https://www.tiktok.com/@bybacademyvn" },        // daily+, 2.2M, fashion education
     { name: "ELLE Vietnam",      platform: "facebook", url: "https://www.facebook.com/ELLEVietnam" },      // daily, fashion editorial Reels
+    // ── ADDED 2026-05-18: high-view rotation expansion (verified active + bitrate) ──
+    { name: "Lê Chi",           platform: "tiktok", url: "https://www.tiktok.com/@lechi.official" },       // daily, FashUP Fashion Icon, phối đồ/styling, 11.4 MB raw
+    { name: "Bim Nguyễn",       platform: "tiktok", url: "https://www.tiktok.com/@bimnguyen58" },          // daily, styling tips + try-on haul, 28.7 MB raw
+    { name: "Tudo Khánh Linh",  platform: "tiktok", url: "https://www.tiktok.com/@tudokhanhlinh" },        // daily, fashion creator (OOTD/styling), 13.5 MB raw
+    { name: "The Navarose",      platform: "tiktok", url: "https://www.tiktok.com/@the.navarose" },         // daily, fashion KOL ~5.6M followers, 5.3 MB raw
   ],
 
   // ── me_be (Mẹ & Bé) — parenting, baby products ──
@@ -118,6 +146,11 @@ export const REELS_SOURCES = {
     { name: "Xoài Fam (Trang Lou)", platform: "tiktok", url: "https://www.tiktok.com/@xoaifam" },          // daily, 797K, mom-baby lifestyle
     { name: "Gia Đình Cam Cam",  platform: "tiktok",   url: "https://www.tiktok.com/@giadinhcamcam" },     // daily, 725K, family vlogs + tips
     { name: "Nguyễn Vy Family",  platform: "tiktok",   url: "https://www.tiktok.com/@nguyenvy1234567" },   // daily, 1M, #1 family TikTok VN
+    // ── ADDED 2026-05-18: high-view rotation expansion (verified active + bitrate) ──
+    { name: "Làm Mẹ Cùng Phương", platform: "tiktok", url: "https://www.tiktok.com/@lammecungphuongg" },  // daily, mẹ bỉm review (bỉm, sữa, ăn dặm), 6.2 MB raw
+    { name: "Sếp An Nhàn",       platform: "tiktok",   url: "https://www.tiktok.com/@sepannhan" },          // daily, parenting/dạy con (bé Bống), 8.6 MB raw
+    { name: "Tina Thảo Thi",     platform: "tiktok",   url: "https://www.tiktok.com/@tinathaothi" },        // daily, top VN parenting/family creator ~5M, 68 MB raw
+    { name: "Gia Đình Truyền Hình", platform: "tiktok", url: "https://www.tiktok.com/@giadinhtruyenhinh" }, // daily, family vlog (kids/parenting), 16.4 MB raw
   ],
 
   // ── the_thao (Thể Thao) — fitness, workout, outdoor ──
@@ -140,6 +173,11 @@ export const REELS_SOURCES = {
     { name: "Phan Bảo Long",        platform: "tiktok",   url: "https://www.tiktok.com/@phanbaolonglms" },   // weight loss coaching
     { name: "HitFit VN",             platform: "tiktok",   url: "https://www.tiktok.com/@hitfit.vn" },        // group workout classes
     { name: "California Fitness",    platform: "facebook", url: "https://www.facebook.com/cfycvn" },
+    // ── ADDED 2026-05-18: high-view rotation expansion (verified active + bitrate) ──
+    { name: "Én Fitness",            platform: "tiktok",   url: "https://www.tiktok.com/@mc.hienvinh" },     // daily, fitness/sport challenges, 1.6M, 15.4 MB raw
+    { name: "ProLifting VN",         platform: "tiktok",   url: "https://www.tiktok.com/@prolifting.vn" },   // daily, weightlifting/powerlifting technique, 16.0 MB raw
+    { name: "Ngô Thuý Mông Kong",   platform: "tiktok",   url: "https://www.tiktok.com/@ngothuy.mongkong" }, // daily, gym glute/thigh training, 6.2 MB raw
+    { name: "Net Việt Fitness Yoga", platform: "tiktok",   url: "https://www.tiktok.com/@fitness.yoga.netviet" }, // daily, fitness + yoga workouts, 44 MB raw
   ],
 
   // ── bach_hoa (Bách Hóa Online) — general life hacks ──
@@ -153,6 +191,11 @@ export const REELS_SOURCES = {
     { name: "Kenh14 Official",    platform: "tiktok",   url: "https://www.tiktok.com/@kenh14official" },     // multi/day, 9M, #1 youth media VN
     { name: "Anh Vũ Trọc",       platform: "tiktok",   url: "https://www.tiktok.com/@vuvanduc.com" },      // daily, life hacks via tech angle
     { name: "Kenh14 FB",          platform: "facebook", url: "https://www.facebook.com/Kenh14" },            // multi/day, Vietnam #1 youth media
+    // ── ADDED 2026-05-18: high-view rotation expansion (verified active + bitrate) ──
+    { name: "VnExpress",          platform: "tiktok",   url: "https://www.tiktok.com/@vnexpress.official" }, // multi/day, tin tức đời sống xã hội, 3.9 MB raw
+    { name: "ANH EM TV",          platform: "tiktok",   url: "https://www.tiktok.com/@anhemtv.vn" },         // daily, review sản phẩm (SChannel), 17.6 MB raw
+    { name: "Út Về Vườn",        platform: "tiktok",   url: "https://www.tiktok.com/@utvevuon99" },         // daily, mẹo vặt nấu ăn/đời sống, 17.2 MB raw
+    { name: "Hoshi Phan",         platform: "tiktok",   url: "https://www.tiktok.com/@hoshiphan" },          // daily, mẹo vặt nấu nướng, ~6.3M, 10.7 MB raw
   ],
 };
 
