@@ -1,10 +1,11 @@
 /**
- * DAILY REELS RUN — 3 Reels per FB page/day for audience building.
+ * DAILY REELS RUN — 4 Reels per FB page/day for audience building.
  *
- * Schedule: 3 slots/day (VN time):
+ * Schedule: 4 slots/day (VN time):
  *   Slot 1 (sáng):  06:00 – 06:30
- *   Slot 2 (trưa):  11:30 – 12:00
- *   Slot 3 (chiều): 18:00 – 18:30
+ *   Slot 2 (trưa):  11:00 – 11:30
+ *   Slot 3 (chiều): 17:00 – 17:30
+ *   Slot 4 (tối):   21:00 – 21:30
  *
  * Auto-detect: when run WITHOUT --schedule-at, picks the NEXT upcoming
  * slot based on current VN time. If all 3 slots have passed today, picks
@@ -36,12 +37,13 @@ function arg(name, fallback = null) {
 
 const SKIP_PAGES = (arg("--skip-page", "") || "").split(",").filter(Boolean);
 
-// ── 3-slot schedule (VN time) ─────────────────────────────────────────────
+// ── 4-slot schedule (VN time) ─────────────────────────────────────────────
 // Each slot: [startHH:MM, endHH:MM, label]
 const SLOTS = [
   ["6:00",  "6:30",  "sáng"],
-  ["11:30", "12:00", "trưa"],
-  ["18:00", "18:30", "chiều"],
+  ["11:00", "11:30", "trưa"],
+  ["17:00", "17:30", "chiều"],
+  ["21:00", "21:30", "tối"],
 ];
 
 /**
@@ -68,7 +70,7 @@ function pickNextSlot() {
       return { start, end, label };
     }
   }
-  // All slots passed today → pick first slot tomorrow (sáng)
+  // All 4 slots passed today → pick first slot tomorrow (sáng)
   return { start: SLOTS[0][0], end: SLOTS[0][1], label: SLOTS[0][2] + " (mai)" };
 }
 
@@ -152,7 +154,7 @@ async function main() {
   const startTime = Date.now();
 
   log("╔══════════════════════════════════════════════════╗");
-  log("║     DAILY REELS — 8 FB Pages (1 Reel each)      ║");
+  log("║   DAILY REELS — 8 FB Pages × 4 slots/ngày       ║");
   log("╚══════════════════════════════════════════════════╝");
   log(`📅 Slot: ${SLOT.label} | ${SCHEDULE_AT}–${SCHEDULE_END} VN (base=+${baseDelay}m, stagger=${stagger.toFixed(1)}m)`);
   log(`📱 Pages: ${REEL_PAGES.join(", ")}`);
