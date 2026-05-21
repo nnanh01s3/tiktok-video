@@ -131,6 +131,46 @@ function cleanChromeTmp() {
   } catch {}
 }
 
+/**
+ * Kill any Chrome whose --user-data-dir points to data\shopee\reels\<page>\.
+ * Called immediately after a worker for that page exits — even if reels.mjs
+ * cleaned up its own Chromes via process.on('exit'), this is a belt-and-
+ * suspenders safety net for races (e.g. shell wrapper PID confusion,
+ * SIGKILL of the worker before its exit handler fires).
+ */
+function killChromeForPage(page) {
+  try {
+    // PS regex `\\` matches literal `\`; JS template `\\\\` = string `\\` = PS regex `\\`
+    const ps =
+      "Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | " +
+      `Where-Object { $_.CommandLine -match 'reels\\\\${page}\\\\' } | ` +
+      "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
+    execSync(`powershell -NoProfile -Command "${ps}"`, { stdio: "pipe", timeout: 8000 });
+  } catch {}
+}
+
+/**
+ * Sweep stale Chromes by chrome_tmp_<timestamp> age. Anything older than
+ * maxAgeSec seconds is considered orphaned (active FB scrapes complete in
+ * ~40s; threshold 90s gives generous margin for slow scrolls/large pages).
+ *
+ * Runs on an interval throughout main() to catch any Chromes that slip past
+ * both reels.mjs cleanup AND killChromeForPage (e.g. parent worker died
+ * before spawning Chrome but Chrome started anyway).
+ */
+function sweepStaleChromes(maxAgeSec = 90) {
+  try {
+    const cutoffMs = Date.now() - maxAgeSec * 1000;
+    // PS Where-Object: inline `if` keeps $Matches in the same pipeline scope
+    // so the regex capture is reliably bound when the comparison runs.
+    const ps =
+      "Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | " +
+      `Where-Object { if ($_.CommandLine -match 'chrome_tmp_(\\d+)') { [int64]$Matches[1] -lt ${cutoffMs} } else { $false } } | ` +
+      "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
+    execSync(`powershell -NoProfile -Command "${ps}"`, { stdio: "pipe", timeout: 8000 });
+  } catch {}
+}
+
 function runWorker(page, delayMin, logFile) {
   return new Promise((resolve) => {
     const proc = spawn("node", [
@@ -197,9 +237,15 @@ async function runSlot(dayOffset, slotStart, slotEnd, slotLabel, dateStr, logFil
 
   // ── Round 1 ──
   killPipelineChrome();
+  // Per-page kill in the promise chain: when a worker resolves we know its
+  // node process has exited, so any Chrome with that page's profile dir is
+  // an orphan. Fires inline before resolve propagates upward.
   const round1Promises = REEL_PAGES.map((page, i) => {
     const delay = Math.round(baseDelay + i * stagger);
-    return runWorker(page, delay, logFile);
+    return runWorker(page, delay, logFile).then((r) => {
+      killChromeForPage(page);
+      return r;
+    });
   });
   const round1 = await Promise.all(round1Promises);
 
@@ -212,7 +258,10 @@ async function runSlot(dayOffset, slotStart, slotEnd, slotLabel, dateStr, logFil
     killPipelineChrome();
     const retryBase = endDelay + 5;
     const round2Promises = misses.map((page, i) =>
-      runWorker(page, retryBase + i * 3, logFile)
+      runWorker(page, retryBase + i * 3, logFile).then((r) => {
+        killChromeForPage(page);
+        return r;
+      })
     );
     const round2 = await Promise.all(round2Promises);
     stillMissed = round2.filter((r) => /Posted 0\//.test(r.output)).map((r) => r.page);
@@ -221,6 +270,14 @@ async function runSlot(dayOffset, slotStart, slotEnd, slotLabel, dateStr, logFil
       `=== Round 2 done. Still missed: ${stillMissed.length ? stillMissed.join(", ") : "none"} ===\n`
     );
   }
+
+  // End-of-slot sweep — during multi-day runs we can sit between slots for
+  // hours. Without this, ~20-30 Chromes from each slot stay resident the
+  // whole interval, accumulating RAM. The slot-start kill at line 199 only
+  // cleans up right before the NEXT slot; this kills now so the box stays
+  // quiet during the long wait.
+  killPipelineChrome();
+  cleanChromeTmp();
 
   return { posted: n - stillMissed.length, total: n, missed: stillMissed };
 }
@@ -275,6 +332,12 @@ async function main() {
   }
 
   // ── REAL RUN ──
+  // Periodic Chrome sweeper: belt-and-suspenders safety net for any leaks
+  // that escape both reels.mjs cleanup AND killChromeForPage. Runs every 60s
+  // for the whole run; threshold 90s ensures we don't kill an active scrape
+  // (FB scrapes complete in ~40s).
+  const sweepInterval = setInterval(() => sweepStaleChromes(90), 60_000);
+
   let slotIdx = 0;
   const summary = [];
 
@@ -301,6 +364,7 @@ async function main() {
   }
 
   // ── Final cleanup ──
+  clearInterval(sweepInterval);
   killPipelineChrome();
   cleanChromeTmp();
 
