@@ -16,8 +16,9 @@
  * Round 2 auto-retry for misses. Total runtime ~ N × 30-60 min.
  *
  * Usage:
- *   node src/daily-reels-multi.mjs --days 5             # 5 days × 32 = 160 Reels
- *   node src/daily-reels-multi.mjs --days 7 --dry-run   # preview without running
+ *   node src/daily-reels-multi.mjs --days 5                       # 5 days starting tomorrow
+ *   node src/daily-reels-multi.mjs --days 2 --from 2026-05-23     # Sat-Sun only
+ *   node src/daily-reels-multi.mjs --days 7 --dry-run             # preview
  *   node src/daily-reels-multi.mjs --days 3 --skip-page gia_dung
  *
  * For TODAY's remaining slots, run `node src/daily-reels.mjs` separately.
@@ -42,15 +43,50 @@ function flag(name) {
 }
 
 const DAYS = parseInt(arg("--days"), 10);
+const FROM_DATE = arg("--from"); // YYYY-MM-DD; default = tomorrow
 const DRY_RUN = flag("--dry-run");
 const SKIP_PAGES = (arg("--skip-page", "") || "").split(",").filter(Boolean);
 
 if (!Number.isFinite(DAYS) || DAYS < 1 || DAYS > 30) {
   console.error("Usage: node src/daily-reels-multi.mjs --days N (required, 1-30)");
+  console.error("  Optional: --from YYYY-MM-DD     start date (default: tomorrow)");
   console.error("  Optional: --dry-run             preview without uploading");
   console.error("  Optional: --skip-page p1,p2     skip specific pages");
   process.exit(1);
 }
+
+/**
+ * Compute starting day offset from today.
+ *   default → 1 (tomorrow)
+ *   --from YYYY-MM-DD → integer days from today (0 = today, 1 = tomorrow, ...)
+ * Past dates rejected; today allowed (past slots within day auto-skip via baseDelay=0).
+ */
+function getStartDayOffset() {
+  if (!FROM_DATE) return 1;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(FROM_DATE)) {
+    console.error(`Invalid --from date "${FROM_DATE}". Use YYYY-MM-DD.`);
+    process.exit(1);
+  }
+  const from = new Date(`${FROM_DATE}T00:00:00`);
+  if (Number.isNaN(from.getTime())) {
+    console.error(`Invalid --from date "${FROM_DATE}".`);
+    process.exit(1);
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const offset = Math.round((from - today) / (24 * 60 * 60 * 1000));
+  if (offset < 0) {
+    console.error(`--from date "${FROM_DATE}" is in the past.`);
+    process.exit(1);
+  }
+  if (offset + DAYS > 31) {
+    console.error(`--from + --days exceeds 30-day FB scheduling guard.`);
+    process.exit(1);
+  }
+  return offset;
+}
+
+const START_DAY = getStartDayOffset();
 
 // ── 4-slot schedule (VN time) — MUST match daily-reels.mjs ────────────────
 const SLOTS = [
@@ -198,10 +234,19 @@ async function main() {
   const totalSlots = SLOTS.length * DAYS;
   const totalReels = REEL_PAGES.length * totalSlots;
 
+  // Date label for header
+  const startDateObj = new Date();
+  startDateObj.setDate(startDateObj.getDate() + START_DAY);
+  const endDateObj = new Date();
+  endDateObj.setDate(endDateObj.getDate() + START_DAY + DAYS - 1);
+  const dateRange = DAYS === 1
+    ? startDateObj.toISOString().slice(0, 10)
+    : `${startDateObj.toISOString().slice(0, 10)} → ${endDateObj.toISOString().slice(0, 10)}`;
+
   console.log("╔════════════════════════════════════════════════════╗");
   console.log("║         MULTI-DAY REELS PRE-SCHEDULE              ║");
   console.log("╚════════════════════════════════════════════════════╝");
-  console.log(`📅 Days:   ${DAYS} (starts TOMORROW)`);
+  console.log(`📅 Days:   ${DAYS} (${dateRange})`);
   console.log(`🎬 Slots:  ${SLOTS.length}/day × ${REEL_PAGES.length} pages = ${REEL_PAGES.length * SLOTS.length}/day`);
   console.log(`📊 Total:  ${totalReels} Reels to pre-schedule`);
   console.log(`📱 Pages:  ${REEL_PAGES.join(", ")}`);
@@ -211,7 +256,7 @@ async function main() {
   // ── DRY RUN: preview only ──
   if (DRY_RUN) {
     console.log("── DRY-RUN PREVIEW ──");
-    for (let d = 1; d <= DAYS; d++) {
+    for (let d = START_DAY; d < START_DAY + DAYS; d++) {
       const dateObj = new Date();
       dateObj.setDate(dateObj.getDate() + d);
       const dateStr = dateObj.toISOString().slice(0, 10);
@@ -233,7 +278,7 @@ async function main() {
   let slotIdx = 0;
   const summary = [];
 
-  for (let d = 1; d <= DAYS; d++) {
+  for (let d = START_DAY; d < START_DAY + DAYS; d++) {
     const dateObj = new Date();
     dateObj.setDate(dateObj.getDate() + d);
     const dateStr = dateObj.toISOString().slice(0, 10);
