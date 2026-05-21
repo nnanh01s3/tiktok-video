@@ -229,9 +229,13 @@ function downloadVideo(video) {
     log("   Cached ✅");
     return outPath;
   }
+  // yt-dlp own timeouts: --socket-timeout aborts stalled reads (Windows
+  // spawnSync timeout doesn't reliably kill child via cmd /c shell wrapper).
+  // --retries / --fragment-retries cap re-attempts so total ≤ ~90s.
   const result = run(
     `"${YTDLP}" -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" ` +
     `--merge-output-format mp4 --max-filesize 200m --no-warnings ` +
+    `--socket-timeout 30 --retries 2 --fragment-retries 2 ` +
     `-o "${outPath}" "${video.url}"`,
     180000
   );
@@ -498,7 +502,11 @@ for (let i = 0; i < toProcess.length; i++) {
     const caption = aiCaption || makeCaption(video.title, PAGE_ARG);
     log(`   📝 ${aiCaption ? "[AI]" : "[fallback]"} "${caption.slice(0, 80)}..."`);
 
-    const { postId, scheduledAt } = await uploadAndPost(processed, caption, DELAY + i * 2);
+    // Use DELAY as-is. Orchestrator (evening-batch.sh) already staggers
+    // cross-page; the legacy `+ i * 2` here drifted the schedule by 2min for
+    // every skipped candidate, pushing posts past the target slot. MAX_PER_RUN=1
+    // means we only post once per run, so per-iteration stagger is meaningless.
+    const { postId, scheduledAt } = await uploadAndPost(processed, caption, DELAY);
 
     // ── Record ONLY on successful upload ──
     const sizeMB = Math.round((statSync(processed).size / 1024 / 1024) * 10) / 10;
