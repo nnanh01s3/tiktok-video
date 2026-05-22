@@ -47,6 +47,8 @@ export const REELS_SOURCES = {
     { name: "Nhi Thỏ",                  platform: "tiktok", url: "https://www.tiktok.com/@nhitho2000" },          // daily, smart-home/đồ công nghệ tiện ích, 811K+, 40 MB raw
     { name: "Lãng Tử Đào Hoa TQ",      platform: "tiktok", url: "https://www.tiktok.com/@langtudaohoatq" },      // daily, quirky/độc-lạ product reviews, 300K+, 28 MB raw
     { name: "Mê Đồ Gia Dụng Tiện Ích", platform: "tiktok", url: "https://www.tiktok.com/@medogiadungtienich6" }, // daily, gadget/tiện ích review (also in gia_dung), 9 MB raw
+    // ── ADDED 2026-05-22: long-format đồ-độc-lạ roundup (verified 12MB+ raw) ──
+    { name: "Hằng Đi Buôn 2",          platform: "tiktok", url: "https://www.tiktok.com/@hangdibuon.2" },        // roundup reviews đồ độc lạ nội địa TQ, 50-111s videos, verified 12 MB raw
   ],
 
   // ── gia_dung (Đồ Gia Dụng) — kitchen, smart home, appliances ──
@@ -68,6 +70,9 @@ export const REELS_SOURCES = {
     { name: "Đồ Gia Dụng Nhập Khẩu",  platform: "tiktok",   url: "https://www.tiktok.com/@dogiadungnhapkhau" },       // daily, imported kitchen/home gadgets, ~1.05 Mbps
     { name: "Dreame Việt Nam",         platform: "tiktok",   url: "https://www.tiktok.com/@dreame.vietnam" },          // daily, official brand (robot vacuum, smart cleaning), ~956 kbps
     { name: "Philips Việt Nam",        platform: "tiktok",   url: "https://www.tiktok.com/@philips.vietnam" },         // daily, official brand (air fryer, blender, vacuum), ~647 kbps
+    // ── ADDED 2026-05-22: long-format roundup channels (verified 12MB+ raw, fixes <2MB filter failures) ──
+    { name: "Hằng Đi Buôn 2",          platform: "tiktok",   url: "https://www.tiktok.com/@hangdibuon.2" },            // roundup reviews đồ gia dụng nội địa TQ, 50-111s videos, verified 12 MB raw
+    { name: "Sam Home",                platform: "tiktok",   url: "https://www.tiktok.com/@samhome_" },                // "Tổng hợp món đồ gia dụng" series, 59-75s videos, verified 11.8 MB raw
   ],
 
   // ── tech (Đồ Công Nghệ) — gadgets, phone, reviews ──
