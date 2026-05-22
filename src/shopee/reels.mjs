@@ -85,6 +85,72 @@ function run(cmd, timeout = 60000) {
   return spawnSync(cmd, { encoding: "utf8", timeout, shell: true });
 }
 
+// ── Chrome process tracker ────────────────────────────────────────────────
+// Each scrapeFacebook spawn uses a unique --user-data-dir timestamped path.
+// Chrome inherits that flag into all 7 child processes (gpu/renderer/network/
+// storage/audio/utility/crashpad), so matching on the profileDir substring
+// catches the whole tree. Tracked here so a worker crash / process.exit()
+// still triggers cleanup via process.on('exit') below.
+const SPAWNED_PROFILES = new Set();
+
+function killChromeByProfile(profileDir) {
+  if (!profileDir) return;
+  try {
+    // -like '*<dir>*' avoids regex escaping headaches (paths contain `\`).
+    // Stop-Process kills each match — we don't need /T because every Chrome
+    // child carries --user-data-dir in its own CommandLine, so all matches
+    // already include the children directly.
+    // Use single quotes to wrap PowerShell command so inner double quotes don't break
+    const escaped = profileDir.replace(/'/g, "''");
+    const ps =
+      `Get-CimInstance Win32_Process -Filter "name='chrome.exe'" | ` +
+      `Where-Object { $_.CommandLine -like '*${escaped}*' } | ` +
+      `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+    execSync(`powershell -NoProfile -Command '${ps.replace(/'/g, "''")}'`, { stdio: "pipe", timeout: 8000 });
+  } catch {}
+  SPAWNED_PROFILES.delete(profileDir);
+}
+
+// Exit-time safety net — fires even if the worker dies abnormally (uncaught
+// throw, SIGTERM from orchestrator, process.exit() mid-flow). Must be sync.
+function cleanupAllSpawnedChromes() {
+  for (const dir of [...SPAWNED_PROFILES]) killChromeByProfile(dir);
+}
+
+// Sweeper: kill stale orphaned Chrome processes + temp dirs
+// (in case a previous run crashed and didn't clean up)
+function sweepOrphanedChromes() {
+  try {
+    const ps = `Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*chrome.exe' } | Stop-Process -Force -ErrorAction SilentlyContinue`;
+    execSync(`powershell -NoProfile -Command '${ps.replace(/'/g, "''")}'`, { stdio: "pipe", timeout: 5000 });
+    log("[startup] Swept orphaned Chrome processes");
+  } catch {}
+
+  try {
+    // Clean chrome_tmp_* dirs older than 2 minutes
+    const tmpDirs = run(`cmd /c dir /b "${OUT_DIR}" 2>nul | findstr chrome_tmp_`, 5000);
+    if (tmpDirs.stdout) {
+      for (const dir of tmpDirs.stdout.trim().split("\n")) {
+        if (!dir) continue;
+        try {
+          const fullPath = join(OUT_DIR, dir);
+          run(`rmdir /s /q "${fullPath}" 2>nul`, 2000);
+        } catch {}
+      }
+    }
+    log(`[startup] Cleaned Chrome temp directories`);
+  } catch {}
+}
+
+process.on("exit", cleanupAllSpawnedChromes);
+process.on("SIGINT", () => { cleanupAllSpawnedChromes(); process.exit(130); });
+process.on("SIGTERM", () => { cleanupAllSpawnedChromes(); process.exit(143); });
+process.on("uncaughtException", (e) => {
+  console.error("[reels] uncaughtException:", e?.message);
+  cleanupAllSpawnedChromes();
+  process.exit(1);
+});
+
 // ── Step 1: Scrape latest video IDs from source ──────────────────────────
 /**
  * Generic yt-dlp scraper for TikTok + YouTube profile URLs.
@@ -141,6 +207,9 @@ async function scrapeFacebook(pageUrl) {
   const CDP_PORT = 9400 + Math.floor(Math.random() * 100);
   const profileDir = join(OUT_DIR, `chrome_tmp_${Date.now()}`);
   mkdirSync(profileDir, { recursive: true });
+  // Register BEFORE spawn so exit handler catches the race where spawn
+  // succeeds but the worker dies before reaching the try/finally.
+  SPAWNED_PROFILES.add(profileDir);
 
   const chromeProc = spawn(
     `"${CHROME}"`,
@@ -215,7 +284,15 @@ async function scrapeFacebook(pageUrl) {
     return videos;
   } finally {
     try { chromeProc.kill(); } catch {}
-    run(`taskkill /F /PID ${chromeProc.pid} 2>nul`, 5000);
+    // /T = kill process tree. Without it, Chrome's ~7 children (gpu, renderer,
+    // network, storage, audio, utility, crashpad) survive as orphans.
+    // NOTE: chromeProc.pid is the cmd.exe wrapper (shell: true above), so this
+    // alone is best-effort; the killChromeByProfile() call is the reliable one.
+    run(`taskkill /F /T /PID ${chromeProc.pid} 2>nul`, 5000);
+    // Reliable cleanup: every chrome.exe in this instance carries
+    // --user-data-dir=<profileDir>, so a CommandLine substring match catches
+    // the full tree regardless of the shell-wrapper PID confusion.
+    killChromeByProfile(profileDir);
     await sleep(500);
     try { run(`rmdir /s /q "${profileDir}" 2>nul`, 5000); } catch {}
   }
@@ -352,6 +429,8 @@ async function uploadAndPost(videoPath, caption, delayMin) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
+sweepOrphanedChromes();
+
 log("=".repeat(60));
 log(`🎬 REELS REPOST → ${PAGE.name} [${PAGE_ARG}]`);
 
