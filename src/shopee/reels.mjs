@@ -93,20 +93,30 @@ function run(cmd, timeout = 60000) {
 // still triggers cleanup via process.on('exit') below.
 const SPAWNED_PROFILES = new Set();
 
+// Run a PowerShell script via -EncodedCommand to bypass 3-layer escape hell
+// (Node string → cmd.exe → PowerShell). Base64 UTF-16LE is the only form
+// cmd.exe can't mangle. Previous inline -Command approach failed silently
+// when paths contained `\`, `*`, or `'` — leaving 200+ orphaned Chromes.
+function runPowershell(ps, timeoutMs = 8000) {
+  const b64 = Buffer.from(ps, "utf16le").toString("base64");
+  execSync(`powershell -NoProfile -NonInteractive -EncodedCommand ${b64}`, {
+    stdio: "pipe",
+    timeout: timeoutMs,
+  });
+}
+
 function killChromeByProfile(profileDir) {
   if (!profileDir) return;
   try {
-    // -like '*<dir>*' avoids regex escaping headaches (paths contain `\`).
-    // Stop-Process kills each match — we don't need /T because every Chrome
-    // child carries --user-data-dir in its own CommandLine, so all matches
-    // already include the children directly.
-    // Use single quotes to wrap PowerShell command so inner double quotes don't break
+    // -like '*<dir>*' matches the --user-data-dir flag in CommandLine.
+    // Every Chrome child (gpu/renderer/network/...) inherits this flag,
+    // so one match expression catches the full tree.
     const escaped = profileDir.replace(/'/g, "''");
     const ps =
       `Get-CimInstance Win32_Process -Filter "name='chrome.exe'" | ` +
       `Where-Object { $_.CommandLine -like '*${escaped}*' } | ` +
       `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-    execSync(`powershell -NoProfile -Command '${ps.replace(/'/g, "''")}'`, { stdio: "pipe", timeout: 8000 });
+    runPowershell(ps);
   } catch {}
   SPAWNED_PROFILES.delete(profileDir);
 }
@@ -121,9 +131,15 @@ function cleanupAllSpawnedChromes() {
 // (in case a previous run crashed and didn't clean up)
 function sweepOrphanedChromes() {
   try {
-    const ps = `Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*chrome.exe' } | Stop-Process -Force -ErrorAction SilentlyContinue`;
-    execSync(`powershell -NoProfile -Command '${ps.replace(/'/g, "''")}'`, { stdio: "pipe", timeout: 5000 });
-    log("[startup] Swept orphaned Chrome processes");
+    // ONLY kill pipeline Chrome (chrome_tmp_ in --user-data-dir) — never touch
+    // the user's personal Chrome browser. Previous version filtered by .Path
+    // which matched ALL chrome.exe instances including the user's own tabs.
+    const ps =
+      `Get-CimInstance Win32_Process -Filter "name='chrome.exe'" | ` +
+      `Where-Object { $_.CommandLine -like '*chrome_tmp_*' } | ` +
+      `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+    runPowershell(ps, 5000);
+    log("[startup] Swept orphaned pipeline Chrome processes");
   } catch {}
 
   try {
