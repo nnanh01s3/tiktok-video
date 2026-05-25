@@ -35,9 +35,18 @@ export async function download(modal_id) {
   } else {
     const videoUrl = `https://www.douyin.com/video/${modal_id}`;
     log.info("download", `yt-dlp ← ${videoUrl}`);
+
+    // Prefer cookies.txt exported by login-export.mjs (avoids Windows DPAPI
+    // failure when Chrome is running). Fall back to --cookies-from-browser
+    // if cookies.txt is missing.
+    const cookiesFile = join(DOUYIN_CONFIG.baseDir, "cookies.txt");
+    const cookieArgs = existsSync(cookiesFile)
+      ? ["--cookies", cookiesFile]
+      : ["--cookies-from-browser", "chrome"];
+
     const r = spawnSync("yt-dlp", [
       videoUrl,
-      "--cookies-from-browser", "chrome",
+      ...cookieArgs,
       "-o", join(outDir, "original.%(ext)s"),
       "--write-info-json",
       "--merge-output-format", "mp4",
