@@ -8,7 +8,7 @@
     "seed": "node scripts/seed-quotes.js",
     "test:pipeline": "node src/pipeline-quotes-veo.js --dry-run",
     "test:db": "node scripts/verify-db.js",
-    "test:douyin": "node --test \"test/douyin/**/*.test.mjs\""
+    "test:douyin": "node --test test/douyin/state.test.mjs test/douyin/parseViewCount.test.mjs test/douyin/srt.test.mjs test/douyin/jaccard.test.mjs test/douyin/extract-subs-dedup.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
