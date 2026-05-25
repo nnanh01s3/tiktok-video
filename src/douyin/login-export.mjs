@@ -23,7 +23,7 @@
  */
 import "../env.js";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { DOUYIN_CONFIG } from "./config.mjs";
 import { createLogger } from "./utils/log.mjs";
@@ -63,11 +63,40 @@ function toNetscape(cookies) {
   return lines.join("\n") + "\n";
 }
 
+function killStaleChromeForProfile() {
+  // Kill any chrome.exe still holding the douyin-cdp-profile (from previous
+  // runs that may have left zombies). Critical on Windows: if a stale Chrome
+  // is using the profile, a new Chrome.exe launched with same --user-data-dir
+  // silently attaches and exits without opening a window.
+  try {
+    const r = spawnSync("powershell", [
+      "-NoProfile", "-Command",
+      `Get-CimInstance Win32_Process -Filter "name='chrome.exe'" | ` +
+      `Where-Object { $_.CommandLine -like '*douyin-cdp-profile*' } | ` +
+      `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`
+    ], { encoding: "utf8", timeout: 10000 });
+    if (r.status === 0) log.info("login-export", "killed stale chrome processes (if any)");
+  } catch {}
+
+  // Sleep so OS releases file handles
+  spawnSync("powershell", ["-NoProfile", "-Command", "Start-Sleep -Seconds 2"], { timeout: 5000 });
+
+  // Remove lockfiles
+  const lockNames = ["lockfile", "SingletonLock", "SingletonCookie", "SingletonSocket"];
+  for (const name of lockNames) {
+    const p = join(DOUYIN_CONFIG.chromeUserDataDir, name);
+    try { if (existsSync(p)) unlinkSync(p); } catch {}
+  }
+}
+
 async function main() {
   const port = pickPort();
   mkdirSync(DOUYIN_CONFIG.chromeUserDataDir, { recursive: true });
   mkdirSync(DOUYIN_CONFIG.baseDir, { recursive: true });
   const cookiesPath = join(DOUYIN_CONFIG.baseDir, "cookies.txt");
+
+  // Pre-flight: clear stale Chrome + lockfiles for this profile
+  killStaleChromeForProfile();
 
   const initialUrl = URL_OVERRIDE || "https://www.douyin.com";
 
