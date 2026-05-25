@@ -66,10 +66,17 @@ async function publishToChannel(name, cfg, { composed_mp4, caption }) {
     if (name === "tiktok") {
       result = await poster.scheduleTikTok({ mediaRef, caption, scheduledAt });
     } else if (name === "yt_shorts") {
-      result = await poster.scheduleYouTube?.({ mediaRef, caption, scheduledAt })
-            || { postId: null, note: "YouTube method not available on poster" };
+      // social-poster.js currently has no scheduleYouTube method — treat as skipped
+      // rather than fake-success with null postId.
+      if (typeof poster.scheduleYouTube !== "function") {
+        return { channel: name, status: "skipped", reason: "scheduleYouTube not implemented in social-poster.js" };
+      }
+      result = await poster.scheduleYouTube({ mediaRef, caption, scheduledAt });
     } else {
       result = await poster.scheduleFacebook({ mediaRef, caption, scheduledAt });
+    }
+    if (!result?.postId) {
+      return { channel: name, status: "fail", error: "poster returned no postId" };
     }
     return { channel: name, status: "ok", post_id: result.postId, scheduledAt };
   } catch (e) {
