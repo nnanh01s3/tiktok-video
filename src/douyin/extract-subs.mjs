@@ -122,7 +122,8 @@ export async function extractSubs(mp4_path, outDir) {
 }
 
 // CLI smoke
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}`) {
+const { isMainModule: __isMain } = await import("./utils/is-cli.mjs");
+if (__isMain(import.meta.url)) {
   const id = process.argv[2];
   if (!id) { console.error("usage: extract-subs.mjs <modal_id>"); process.exit(1); }
   const dir = join(DOUYIN_CONFIG.baseDir, id);

@@ -81,7 +81,8 @@ export async function discover({ keyword, creator, maxResults = DOUYIN_CONFIG.ma
 }
 
 // CLI smoke test
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}`) {
+const { isMainModule: __isMain } = await import("./utils/is-cli.mjs");
+if (__isMain(import.meta.url)) {
   const keyword = process.argv[2] || DOUYIN_CONFIG.keywords[0];
   discover({ keyword, maxResults: 5 })
     .then(r => console.log(JSON.stringify(r, null, 2)))

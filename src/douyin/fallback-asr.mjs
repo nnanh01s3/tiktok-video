@@ -77,7 +77,8 @@ export async function asrFallback(mp4_path) {
 }
 
 // CLI smoke
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}`) {
+const { isMainModule: __isMain } = await import("./utils/is-cli.mjs");
+if (__isMain(import.meta.url)) {
   const mp4 = process.argv[2];
   if (!mp4) { console.error("usage: fallback-asr.mjs <mp4_path>"); process.exit(1); }
   asrFallback(mp4).then(r => console.log(JSON.stringify(r.slice(0, 5), null, 2)));

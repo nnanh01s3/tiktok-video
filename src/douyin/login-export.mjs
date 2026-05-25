@@ -12,9 +12,14 @@
  * the CDP session we control, we bypass that limitation entirely.
  *
  * Usage:
- *   node src/douyin/login-export.mjs                # default 60s wait
- *   node src/douyin/login-export.mjs --wait 120     # 2 min wait
- *   node src/douyin/login-export.mjs --headless     # skip the wait, just dump
+ *   node src/douyin/login-export.mjs                       # default 60s wait, opens window
+ *   node src/douyin/login-export.mjs --wait 120            # 2 min wait
+ *   node src/douyin/login-export.mjs --headless --wait 15  # quick headless refresh
+ *   node src/douyin/login-export.mjs --url <video_url>     # warm cookies for this specific video page
+ *
+ * Side effects:
+ *   - D:/tiktok/douyin/cookies.txt   (Netscape format for yt-dlp --cookies)
+ *   - D:/tiktok/douyin/ua.txt        (Chrome User-Agent string, used by yt-dlp --user-agent)
  */
 import "../env.js";
 import { spawn, spawnSync } from "node:child_process";
@@ -31,6 +36,9 @@ const HEADLESS = args.includes("--headless");
 const WAIT_SECONDS = args.includes("--wait")
   ? parseInt(args[args.indexOf("--wait") + 1]) || 60
   : (HEADLESS ? 8 : 60);
+const URL_OVERRIDE = args.includes("--url")
+  ? args[args.indexOf("--url") + 1]
+  : null;
 
 function pickPort() {
   return DOUYIN_CONFIG.chromeRemotePortBase + 50 + Math.floor(Math.random() * 50);
@@ -61,6 +69,8 @@ async function main() {
   mkdirSync(DOUYIN_CONFIG.baseDir, { recursive: true });
   const cookiesPath = join(DOUYIN_CONFIG.baseDir, "cookies.txt");
 
+  const initialUrl = URL_OVERRIDE || "https://www.douyin.com";
+
   const chromeArgs = [
     HEADLESS ? "--headless=new" : "--start-maximized",
     "--disable-gpu",
@@ -68,7 +78,7 @@ async function main() {
     `--user-data-dir=${DOUYIN_CONFIG.chromeUserDataDir}`,
     "--no-first-run",
     "--disable-blink-features=AutomationControlled",
-    "https://www.douyin.com",
+    initialUrl,
   ];
 
   log.info("login-export", `launching Chrome (${HEADLESS ? "headless" : "windowed"}) on port ${port}`);
@@ -83,11 +93,21 @@ async function main() {
     shell: true, detached: true, stdio: "ignore",
   });
   proc.unref();
-  await sleep(5000);
+
+  // Retry CDP connection — headless Chrome can be slow to bind debug port
+  let tabs = null;
+  for (let attempt = 1; attempt <= 12; attempt++) {
+    await sleep(2000);
+    try {
+      const tabsRes = await fetch(`http://localhost:${port}/json`, { signal: AbortSignal.timeout(3000) });
+      tabs = await tabsRes.json();
+      if (Array.isArray(tabs) && tabs.length > 0) break;
+    } catch (e) {
+      if (attempt === 12) throw new Error(`CDP not reachable on port ${port} after 24s: ${e.message}`);
+    }
+  }
 
   try {
-    const tabsRes = await fetch(`http://localhost:${port}/json`);
-    const tabs = await tabsRes.json();
     const tab = tabs.find(t => t.type === "page") || tabs[0];
     if (!tab?.webSocketDebuggerUrl) throw new Error("No CDP tab found");
 
@@ -112,14 +132,24 @@ async function main() {
     log.info("login-export", `waiting ${WAIT_SECONDS}s for cookies to hydrate / user to login`);
     await sleep(WAIT_SECONDS * 1000);
 
+    // Capture user-agent — needed by yt-dlp to match the session
+    const uaRes = await cdp("Runtime.evaluate", {
+      expression: "navigator.userAgent",
+      returnByValue: true,
+    });
+    const userAgent = uaRes?.result?.value || "";
+
     const { cookies } = await cdp("Network.getAllCookies");
     const douyinCookies = cookies.filter(c =>
       c.domain.includes("douyin.com") || c.domain.includes("snssdk.com") || c.domain.includes("bytedance"));
     log.info("login-export", `dumped ${douyinCookies.length} cookies (filtered from ${cookies.length} total)`);
 
     writeFileSync(cookiesPath, toNetscape(douyinCookies));
+    writeFileSync(join(DOUYIN_CONFIG.baseDir, "ua.txt"), userAgent);
     log.info("login-export", `✅ wrote ${cookiesPath}`);
+    log.info("login-export", `✅ wrote ua.txt: ${userAgent.slice(0, 80)}...`);
     console.log(`\n✅ Cookies saved to: ${cookiesPath}`);
+    console.log(`✅ User-Agent saved to: ${join(DOUYIN_CONFIG.baseDir, "ua.txt")}`);
     console.log(`   yt-dlp will use these automatically via download.mjs.\n`);
 
     ws.close();

@@ -82,7 +82,8 @@ export async function translateSRT(cn_srt_path, vn_srt_path, { context = "" } = 
 }
 
 // CLI smoke
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}`) {
+const { isMainModule: __isMain } = await import("./utils/is-cli.mjs");
+if (__isMain(import.meta.url)) {
   const cn = process.argv[2];
   const vn = process.argv[3] || cn.replace("_cn.srt", "_vn.srt");
   if (!cn) { console.error("usage: translate.mjs <cn_srt> [vn_srt]"); process.exit(1); }

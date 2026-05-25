@@ -36,17 +36,22 @@ export async function download(modal_id) {
     const videoUrl = `https://www.douyin.com/video/${modal_id}`;
     log.info("download", `yt-dlp ← ${videoUrl}`);
 
-    // Prefer cookies.txt exported by login-export.mjs (avoids Windows DPAPI
-    // failure when Chrome is running). Fall back to --cookies-from-browser
-    // if cookies.txt is missing.
+    // Prefer cookies.txt + ua.txt exported by login-export.mjs (avoids Windows
+    // DPAPI failure + matches user-agent to cookies). Fall back to
+    // --cookies-from-browser if cookies.txt is missing.
     const cookiesFile = join(DOUYIN_CONFIG.baseDir, "cookies.txt");
+    const uaFile = join(DOUYIN_CONFIG.baseDir, "ua.txt");
     const cookieArgs = existsSync(cookiesFile)
       ? ["--cookies", cookiesFile]
       : ["--cookies-from-browser", "chrome"];
+    const uaArgs = existsSync(uaFile)
+      ? ["--user-agent", readFileSync(uaFile, "utf8").trim()]
+      : [];
 
     const r = spawnSync("yt-dlp", [
       videoUrl,
       ...cookieArgs,
+      ...uaArgs,
       "-o", join(outDir, "original.%(ext)s"),
       "--write-info-json",
       "--merge-output-format", "mp4",
@@ -84,7 +89,8 @@ export async function download(modal_id) {
 }
 
 // CLI smoke
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}`) {
+const { isMainModule: __isMain } = await import("./utils/is-cli.mjs");
+if (__isMain(import.meta.url)) {
   const id = process.argv[2];
   if (!id) { console.error("usage: download.mjs <modal_id>"); process.exit(1); }
   download(id).then(r => console.log(JSON.stringify(r, null, 2)));
