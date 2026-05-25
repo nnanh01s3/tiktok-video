@@ -48,7 +48,9 @@ export async function download(modal_id) {
       : [];
 
     log.info("download", `yt-dlp ← ${videoUrl}`);
-    const r = spawnSync("yt-dlp", [
+    // shell:false so args with spaces (User-Agent) aren't tokenized by cmd.exe
+    const ytdlpCmd = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
+    const r = spawnSync(ytdlpCmd, [
       videoUrl,
       ...cookieArgs,
       ...uaArgs,
@@ -56,7 +58,7 @@ export async function download(modal_id) {
       "--write-info-json",
       "--merge-output-format", "mp4",
       "--no-warnings",
-    ], { encoding: "utf8", timeout: 300_000, shell: true });
+    ], { encoding: "utf8", timeout: 300_000, shell: false });
 
     const ytdlpOk = r.status === 0 && existsSync(mp4_path) && statSync(mp4_path).size >= 100_000;
     if (!ytdlpOk) {
