@@ -17,27 +17,54 @@ def main():
         print(json.dumps({"error": f"paddleocr not installed: {e}"}), flush=True)
         sys.exit(2)
 
-    ocr = PaddleOCR(lang='ch', use_angle_cls=False, show_log=False)
+    # Newer paddleocr (3.x) removed show_log and use_angle_cls.
+    # Try modern API first, fall back to old API for back-compat.
+    import logging
+    logging.getLogger("ppocr").setLevel(logging.ERROR)
+    try:
+        ocr = PaddleOCR(lang='ch')
+    except (TypeError, ValueError):
+        ocr = PaddleOCR(lang='ch', use_angle_cls=False)
 
     for raw in sys.stdin:
         path = raw.strip()
         if not path:
             continue
         try:
-            result = ocr.ocr(path)
+            # paddleocr 3.x renamed .ocr() → .predict(); keep both for compat
+            if hasattr(ocr, 'predict'):
+                result = ocr.predict(path)
+            else:
+                result = ocr.ocr(path)
         except Exception as e:
             print(json.dumps({"frame_path": path, "text": "", "confidence": 0.0, "boxes": 0, "error": str(e)}), flush=True)
             continue
 
         texts = []
         confs = []
-        if result and result[0]:
-            for line in result[0]:
-                if not line or len(line) < 2:
-                    continue
-                bbox, (txt, conf) = line[0], line[1]
-                texts.append(txt)
-                confs.append(float(conf))
+        if result and len(result) > 0:
+            first = result[0]
+            # paddleocr 3.x: dict with rec_texts / rec_scores
+            if isinstance(first, dict):
+                rec_texts = first.get('rec_texts', []) or []
+                rec_scores = first.get('rec_scores', []) or []
+                for i, txt in enumerate(rec_texts):
+                    conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
+                    texts.append(txt)
+                    confs.append(conf)
+            # paddleocr 2.x: list of [bbox, (text, conf)] entries
+            elif isinstance(first, list):
+                for line in first:
+                    if not line or len(line) < 2:
+                        continue
+                    try:
+                        bbox, payload = line[0], line[1]
+                        if isinstance(payload, (list, tuple)) and len(payload) >= 2:
+                            txt, conf = payload[0], payload[1]
+                            texts.append(txt)
+                            confs.append(float(conf))
+                    except Exception:
+                        continue
 
         merged = " ".join(texts).strip()
         avg_conf = (sum(confs) / len(confs)) if confs else 0.0

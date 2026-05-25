@@ -84,24 +84,37 @@ export async function extractSubs(mp4_path, outDir) {
   const frames = await sampleFrames(mp4_path, frames_dir);
   log.info("extract-subs", `sampled ${frames.length} frames`);
 
-  const ocrResults = await runOCR(frames);
+  let cues = [];
+  let avgConf = 0;
+  let ocrThrew = false;
+  let ocrError = null;
 
-  const cues = dedupOCRResults(ocrResults, {
-    intervalMs: DOUYIN_CONFIG.ocr.sampleIntervalMs,
-    jaccardThreshold: 0.85,
-    minConfidence: DOUYIN_CONFIG.ocr.minConfidence,
-  });
-  const avgConf = cues.length
-    ? cues.reduce((a, c) => a + c.confidence, 0) / cues.length
-    : 0;
-
-  log.info("extract-subs", `OCR → ${cues.length} cues, avg_conf=${avgConf.toFixed(2)}`);
+  try {
+    const ocrResults = await runOCR(frames);
+    cues = dedupOCRResults(ocrResults, {
+      intervalMs: DOUYIN_CONFIG.ocr.sampleIntervalMs,
+      jaccardThreshold: 0.85,
+      minConfidence: DOUYIN_CONFIG.ocr.minConfidence,
+    });
+    avgConf = cues.length
+      ? cues.reduce((a, c) => a + c.confidence, 0) / cues.length
+      : 0;
+    log.info("extract-subs", `OCR → ${cues.length} cues, avg_conf=${avgConf.toFixed(2)}`);
+  } catch (e) {
+    ocrThrew = true;
+    ocrError = e.message;
+    log.warn("extract-subs", `OCR crashed: ${e.message.slice(0, 200)} — will fallback to Gemini ASR`);
+  }
 
   let source = "ocr";
   let finalCues = cues;
 
-  if (cues.length < DOUYIN_CONFIG.ocr.minCues || avgConf < DOUYIN_CONFIG.ocr.minConfidence) {
-    log.warn("extract-subs", `below threshold → falling back to Gemini ASR`);
+  const needFallback = ocrThrew ||
+    cues.length < DOUYIN_CONFIG.ocr.minCues ||
+    avgConf < DOUYIN_CONFIG.ocr.minConfidence;
+
+  if (needFallback) {
+    log.warn("extract-subs", `→ Gemini ASR fallback (reason: ${ocrThrew ? "ocr crash" : "below threshold"})`);
     const { asrFallback } = await import("./fallback-asr.mjs");
     const asrCues = await asrFallback(mp4_path);
     finalCues = asrCues;
