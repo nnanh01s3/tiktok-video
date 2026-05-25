@@ -34,11 +34,10 @@ export async function download(modal_id) {
     log.info("download", `skip — already exists for ${modal_id}`);
   } else {
     const videoUrl = `https://www.douyin.com/video/${modal_id}`;
-    log.info("download", `yt-dlp ← ${videoUrl}`);
 
-    // Prefer cookies.txt + ua.txt exported by login-export.mjs (avoids Windows
-    // DPAPI failure + matches user-agent to cookies). Fall back to
-    // --cookies-from-browser if cookies.txt is missing.
+    // Try yt-dlp first (fast path) — but Douyin's anti-bot frequently
+    // blocks it with empty JSON. On failure, fall through to CDP-based
+    // download that intercepts the DASH streams from a real browser session.
     const cookiesFile = join(DOUYIN_CONFIG.baseDir, "cookies.txt");
     const uaFile = join(DOUYIN_CONFIG.baseDir, "ua.txt");
     const cookieArgs = existsSync(cookiesFile)
@@ -48,6 +47,7 @@ export async function download(modal_id) {
       ? ["--user-agent", readFileSync(uaFile, "utf8").trim()]
       : [];
 
+    log.info("download", `yt-dlp ← ${videoUrl}`);
     const r = spawnSync("yt-dlp", [
       videoUrl,
       ...cookieArgs,
@@ -57,9 +57,16 @@ export async function download(modal_id) {
       "--merge-output-format", "mp4",
       "--no-warnings",
     ], { encoding: "utf8", timeout: 300_000, shell: true });
-    if (r.status !== 0) throw new Error(`yt-dlp failed (code ${r.status}): ${r.stderr || r.stdout}`);
-    if (!existsSync(mp4_path)) throw new Error(`yt-dlp ran but no mp4 produced at ${mp4_path}`);
-    if (statSync(mp4_path).size < 100_000) throw new Error(`download appears corrupt (<100KB)`);
+
+    const ytdlpOk = r.status === 0 && existsSync(mp4_path) && statSync(mp4_path).size >= 100_000;
+    if (!ytdlpOk) {
+      log.warn("download", `yt-dlp failed (${r.status}) — falling back to CDP download`);
+      const { cdpDownload } = await import("./cdp-download.mjs");
+      await cdpDownload(modal_id);
+      if (!existsSync(mp4_path) || statSync(mp4_path).size < 100_000) {
+        throw new Error(`Both yt-dlp and CDP download failed for ${modal_id}`);
+      }
+    }
   }
 
   const probe = ffprobeJson(mp4_path);
