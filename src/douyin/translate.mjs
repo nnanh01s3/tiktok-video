@@ -12,21 +12,43 @@ const log = createLogger(DOUYIN_CONFIG.logFile);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const SYSTEM_PROMPT = `You are translating Douyin storytelling video subtitles from Chinese to Vietnamese.
+const SYSTEM_PROMPT = `Bạn là dịch giả chuyên dịch phụ đề video kể chuyện Douyin từ tiếng Trung sang tiếng Việt.
 
-Context: spiritual/philosophical/cổ trang narrative (e.g., immortals, awakening, meditation, ancient stories).
+THỂ LOẠI: tu tiên / cổ trang / huyền huyễn (immortal cultivation, ancient sects, spiritual awakening).
+Đây là thể loại quen thuộc với độc giả Việt qua truyện convert/dịch: Tu Chân, Tiên Hiệp, Đấu Phá, v.v.
 
-Style requirements:
-- Natural Vietnamese kể chuyện, giữ nhịp narrative.
-- When relevant, use traditional vocabulary: "thiên thần", "giác ngộ", "tu sĩ", "căn nguyên", "linh hồn", "kiếp", "đạo".
-- Use "ngài / vị ấy / hắn" depending on tone (avoid bland "anh ta" / "ông ta" for spiritual contexts).
-- Each Vietnamese line must NOT exceed 1.5× the Chinese line character count (for subtitle timing fit).
+QUY TẮC DỊCH TÊN/CHỨC DANH (HÁN-VIỆT — BẮT BUỘC):
+- 宗 (zōng) = "Tông" (KHÔNG dịch "giáo phái"). Vd: 青雲宗 → "Thanh Vân Tông"
+- 弟子 = "đệ tử". 雜役弟子 → "đệ tử tạp dịch" (KHÔNG "dạo tạp")
+- 內門/外門 弟子 = "đệ tử nội môn / ngoại môn"
+- 長老 = "trưởng lão". 掌門 = "chưởng môn". 師父 = "sư phụ". 師兄/師姐 = "sư huynh / sư tỷ"
+- 真人 = "chân nhân". 仙人 = "tiên nhân". 道友 = "đạo hữu"
+- Nhân xưng: dùng "ta/hắn/y/nàng/lão già" thay "tôi/anh ta/cô ta/ông già" cho ngữ cảnh cổ trang.
 
-Output requirements:
-- Same cue numbering as input.
-- Same timestamps EXACTLY as input (do not adjust timing).
-- Vietnamese text only — no Chinese, no commentary, no markdown.
-- Valid SRT format with blank line between cues.`;
+IDIOM/THÀNH NGỮ — TRÁNH DỊCH THEO MẶT CHỮ:
+- 苟且 = "lay lắt" / "sống tạm bợ" / "đắp đổi qua ngày" (KHÔNG "lợp lẽ" hay "tạm bợ qua")
+- 苟且一生 = "lay lắt sống một đời" / "tạm bợ một kiếp"
+- 爛骨頭 = "đám lười nhác" / "lũ vô tích sự" (KHÔNG "xương rách" - đó là dịch chữ sai)
+- 死挺著 = "cứ ì ra đó" / "lì ra"
+- 太陽曬屁股 = "mặt trời đã rọi vào đít rồi" (giữ idiom hình ảnh, hợp văn nói)
+- 寫照 = "hình ảnh chân thực" / "bức tranh"
+- 階級地位 = "địa vị giai cấp"
+- 雜糧飯 = "cơm tạp lương" / "cơm độn"
+- 修煉 = "tu luyện". 突破 = "đột phá". 境界 = "cảnh giới". 渡劫 = "độ kiếp"
+- 元神/元嬰 = "nguyên thần / nguyên anh". 金丹 = "kim đan"
+
+VĂN PHONG:
+- Tự nhiên, dễ đọc, giữ nhịp kể chuyện (KHÔNG cứng nhắc theo cấu trúc Trung văn).
+- Cảm xúc giữ đúng tone gốc (đói khổ, tủi nhục, phẫn nộ, giác ngộ...).
+- Câu ngắn vừa khung hình subtitle.
+
+GIỚI HẠN KỸ THUẬT:
+- Mỗi dòng VN ≤ 1.5× số ký tự CN (để fit subtitle timing).
+- Giữ NGUYÊN số thứ tự cue và timestamps — không sửa.
+
+OUTPUT:
+- SRT hợp lệ, chỉ tiếng Việt, không markdown, không giải thích.
+- Có dòng trống giữa các cue.`;
 
 function buildPrompt(cnSrtText, context) {
   return `Translate the following Chinese SRT to Vietnamese.
@@ -42,8 +64,11 @@ async function callClaude(cnSrtText, context, stricter = false) {
     ? SYSTEM_PROMPT + "\n\nCRITICAL: previous attempt had invalid output. You MUST preserve cue numbering and timestamps EXACTLY as input. Output VALID SRT format with blank line between cues."
     : SYSTEM_PROMPT;
   const res = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 4096,
+    // Upgrade Haiku → Sonnet for translation: cultivation vocabulary needs
+    // stronger reasoning than Haiku to avoid literal-character translation
+    // mistakes (e.g., 爛骨頭 idiom → "xương rách" wrong, "đám lười nhác" right).
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 8192,
     system: sys,
     messages: [{ role: "user", content: buildPrompt(cnSrtText, context) }],
   });
