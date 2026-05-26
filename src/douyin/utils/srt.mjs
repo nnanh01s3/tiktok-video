@@ -3,13 +3,16 @@
  * Cue shape: { index: number, start_ms: number, end_ms: number, text: string }
  */
 
-const TS_RE = /^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/;
+// Accepts BOTH standard SRT "HH:MM:SS,mmm" and Gemini's lazy "MM:SS,mmm"
+// (drops the hours when video is under 1 hour). Without this leniency,
+// Pro's output silently parses to 0 cues.
+const TS_RE = /^(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[,.](\d{3})$/;
 
 function tsToMs(ts) {
   const m = ts.trim().match(TS_RE);
   if (!m) throw new Error(`Invalid SRT timestamp: ${ts}`);
   const [, h, mn, s, ms] = m;
-  return (+h) * 3600_000 + (+mn) * 60_000 + (+s) * 1000 + (+ms);
+  return (h ? +h : 0) * 3600_000 + (+mn) * 60_000 + (+s) * 1000 + (+ms);
 }
 
 function msToTs(ms) {
@@ -34,7 +37,8 @@ export function parseSRT(src) {
     }
     const timeLine = lines[i];
     if (!timeLine) continue;
-    const m = timeLine.match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/);
+    // Accept both "HH:MM:SS,mmm" and "MM:SS,mmm" (Gemini Pro's lazy variant).
+    const m = timeLine.match(/((?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{3})/);
     if (!m) continue;
     const start_ms = tsToMs(m[1]);
     const end_ms = tsToMs(m[2]);
