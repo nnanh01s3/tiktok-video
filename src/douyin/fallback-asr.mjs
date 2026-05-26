@@ -13,6 +13,8 @@
 import "../env.js";
 import { GoogleGenAI } from "@google/genai";
 import { spawnSync } from "node:child_process";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parseSRT } from "./utils/srt.mjs";
 import { createLogger } from "./utils/log.mjs";
 import { DOUYIN_CONFIG } from "./config.mjs";
@@ -20,7 +22,8 @@ import { DOUYIN_CONFIG } from "./config.mjs";
 const log = createLogger(DOUYIN_CONFIG.logFile);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const ASR_MODEL = "gemini-2.5-pro";
+// Try Pro first (more thorough), fall back to Flash if Pro consistently fails.
+const ASR_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash"];
 
 function buildPrompt({ durationSec, attempt }) {
   const stricter = attempt > 1
@@ -55,7 +58,7 @@ function probeDurationSec(mp4_path) {
   return d;
 }
 
-async function callGemini(mp4_path, prompt) {
+async function callGemini(mp4_path, prompt, model) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
   const ai = new GoogleGenAI({ apiKey });
@@ -75,7 +78,7 @@ async function callGemini(mp4_path, prompt) {
   if (info.state !== "ACTIVE") throw new Error("Gemini upload timeout");
 
   const res = await ai.models.generateContent({
-    model: ASR_MODEL,
+    model,
     contents: [
       { fileData: { fileUri: info.uri, mimeType: "video/mp4" } },
       { text: prompt },
@@ -86,57 +89,84 @@ async function callGemini(mp4_path, prompt) {
 
   try { await ai.files.delete({ name: info.name }); } catch {}
 
-  return stripCodeFence(text);
+  return { raw: text, stripped: stripCodeFence(text) };
+}
+
+function dumpDebug(mp4_path, model, attempt, raw) {
+  try {
+    const dir = dirname(mp4_path);
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `asr_debug_${model.replace(/[^a-z0-9]/gi, "_")}_attempt${attempt}.txt`);
+    writeFileSync(path, raw || "(empty response)");
+    log.warn("fallback-asr", `dumped raw response → ${path}`);
+  } catch (e) {
+    log.warn("fallback-asr", `failed to dump debug: ${e.message}`);
+  }
 }
 
 export async function asrFallback(mp4_path) {
   const durationSec = Math.round(probeDurationSec(mp4_path));
-  const coverageThresholdSec = durationSec * 0.85; // last cue must end past this point
+  const coverageThresholdSec = durationSec * 0.85;
   log.info("fallback-asr", `video duration: ${durationSec}s, requiring coverage >= ${coverageThresholdSec.toFixed(0)}s`);
 
   let lastErr;
   let bestCues = null;
   let bestCoverage = 0;
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      log.info("fallback-asr", `Gemini ${ASR_MODEL} attempt ${attempt}/3`);
-      const srtText = await callGemini(mp4_path, buildPrompt({ durationSec, attempt }));
-      if (srtText.trim() === "NO_SPEECH") {
-        throw new Error("Gemini reports no speech in video");
+  // Try each model in order; for each, up to 2 attempts (with prompt escalation).
+  // Total max calls = MODELS.length * 2 = 4. Stop early on success.
+  for (const model of ASR_MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        log.info("fallback-asr", `${model} attempt ${attempt}/2`);
+        const { raw, stripped } = await callGemini(
+          mp4_path, buildPrompt({ durationSec, attempt }), model
+        );
+
+        if (stripped.trim() === "NO_SPEECH") {
+          dumpDebug(mp4_path, model, attempt, raw);
+          throw new Error(`${model} reports no speech in video`);
+        }
+
+        const cues = parseSRT(stripped);
+        if (!cues.length) {
+          dumpDebug(mp4_path, model, attempt, raw);
+          throw new Error(`${model} returned 0 parseable cues (raw len=${raw.length}, stripped len=${stripped.length})`);
+        }
+
+        const lastEndSec = cues[cues.length - 1].end_ms / 1000;
+        const coverage = lastEndSec / durationSec;
+        log.info("fallback-asr",
+          `${model} attempt ${attempt}: ${cues.length} cues, coverage ${(coverage * 100).toFixed(0)}% (last cue ends ${lastEndSec.toFixed(1)}s / ${durationSec}s)`
+        );
+
+        if (lastEndSec > bestCoverage) {
+          bestCoverage = lastEndSec;
+          bestCues = cues;
+        }
+
+        if (lastEndSec >= coverageThresholdSec) {
+          log.info("fallback-asr", `✅ coverage acceptable, returning ${cues.length} cues from ${model}`);
+          return cues;
+        }
+
+        log.warn("fallback-asr", `coverage ${(coverage * 100).toFixed(0)}% < 85% — escalating prompt`);
+      } catch (e) {
+        lastErr = e;
+        log.warn("fallback-asr", `${model} attempt ${attempt} failed: ${e.message}`);
       }
-      const cues = parseSRT(srtText);
-      if (!cues.length) throw new Error("Gemini returned 0 cues");
-
-      const lastEndSec = cues[cues.length - 1].end_ms / 1000;
-      const coverage = lastEndSec / durationSec;
-      log.info("fallback-asr", `attempt ${attempt}: ${cues.length} cues, coverage ${(coverage * 100).toFixed(0)}% (last cue ends ${lastEndSec.toFixed(1)}s / ${durationSec}s)`);
-
-      // Track best result so far
-      if (lastEndSec > bestCoverage) {
-        bestCoverage = lastEndSec;
-        bestCues = cues;
-      }
-
-      if (lastEndSec >= coverageThresholdSec) {
-        log.info("fallback-asr", `✅ coverage acceptable, returning ${cues.length} cues`);
-        return cues;
-      }
-
-      log.warn("fallback-asr", `coverage ${(coverage * 100).toFixed(0)}% < 85% — retrying with stricter prompt`);
-    } catch (e) {
-      lastErr = e;
-      log.warn("fallback-asr", `attempt ${attempt} failed: ${e.message}`);
+      await sleep(1500);
     }
-    if (attempt < 3) await sleep(2000 * Math.pow(2, attempt - 1));
   }
 
-  // All 3 attempts done. Return best partial result if we have one, else throw.
+  // All models + attempts done. Return best partial if any.
   if (bestCues) {
-    log.warn("fallback-asr", `⚠ all attempts under coverage threshold — returning best partial (${bestCues.length} cues, ends ${bestCoverage.toFixed(1)}s)`);
+    log.warn("fallback-asr",
+      `⚠ no model hit coverage threshold — returning best partial (${bestCues.length} cues, ends ${bestCoverage.toFixed(1)}s)`
+    );
     return bestCues;
   }
-  throw new Error(`asrFallback failed after 3 attempts: ${lastErr?.message || "unknown"}`);
+  throw new Error(`asrFallback exhausted all models (${ASR_MODELS.join(", ")}): ${lastErr?.message || "unknown"}`);
 }
 
 // CLI smoke
