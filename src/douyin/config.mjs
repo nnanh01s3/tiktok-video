@@ -47,8 +47,12 @@ export const DOUYIN_CONFIG = {
     // For platform redistribution (TikTok/FB/YT) this is invisible after
     // their re-encode pass. Switch to 'medium' if you keep originals.
     preset: "ultrafast",
+    // cropTopPct=0.08 removes Douyin logo + creator handle (top band).
+    // cropBottomPct=0.18 removes the Chinese hard-subtitle band (typically at
+    // 85-95% of source height in Douyin storytelling videos) AND the Douyin
+    // bottom UI. Tune lower if you want to keep the CN sub visible.
     cropTopPct: 0.08,
-    cropBottomPct: 0.05,
+    cropBottomPct: 0.18,
   },
 
   // Publish channels
