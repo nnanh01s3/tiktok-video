@@ -61,7 +61,7 @@ export async function compose({ mp4_path, vn_srt_path, output_path }) {
     "-c:a", "copy",
     "-pix_fmt", "yuv420p",
     outAbs,
-  ], { encoding: "utf8", timeout: 600_000, cwd });
+  ], { encoding: "utf8", timeout: 1200_000, cwd, maxBuffer: 50 * 1024 * 1024 });
   if (r.status !== 0) {
     throw new Error(`ffmpeg compose failed: ${r.stderr.slice(-1500)}`);
   }

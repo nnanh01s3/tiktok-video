@@ -43,7 +43,10 @@ export const DOUYIN_CONFIG = {
     height: 1920,
     fps: 30,
     crf: 23,
-    preset: "medium",
+    // 'ultrafast' is ~4-5x faster than 'medium' with only modest size increase.
+    // For platform redistribution (TikTok/FB/YT) this is invisible after
+    // their re-encode pass. Switch to 'medium' if you keep originals.
+    preset: "ultrafast",
     cropTopPct: 0.08,
     cropBottomPct: 0.05,
   },
