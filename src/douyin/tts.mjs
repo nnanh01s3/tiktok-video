@@ -101,21 +101,31 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
   log.info("tts", `rendered ${cueFiles.length}/${cues.length} cues`);
 
   // Step 2: build ffmpeg filter_complex.
-  // For each cue: [N:a]adelay=START|START,atempo=RATIO[aN]
-  //   - adelay places audio at start_ms in both stereo channels (we use mono input but stereo output)
-  //   - atempo speeds up if natural duration > slot, slows down if much shorter (clamped)
-  // Then: [a0][a1]...amix=inputs=K:duration=longest:normalize=0[out]
+  // Strategy: use a silent base track (anullsrc) sized to the LAST cue's end_ms
+  // as input 0, then mix all cues delayed by adelay on top. With anullsrc as
+  // input 0 and amix duration=first, the output is EXACTLY the silent track
+  // length — guarantees all delayed cues are captured even those at minute 4+.
   //
-  // Note: atempo accepts [0.5, 100.0]. For ratios outside that, chain multiple
-  // atempo filters. We clamp aggressive: max 1.4x faster, no slowdown if natural < slot
-  // (silence will fill the gap naturally via adelay).
+  // Why this matters: without the silent base, amix's "duration=longest" looks
+  // at INPUT durations not the delayed-output duration, and may close the mix
+  // before late-delayed cues finish playing back. Adding the silent base of
+  // explicit length forces the output timeline to be at least that long.
+  //
+  // atempo: speed up TTS clip (max 1.4×) when natural duration > SRT slot,
+  // so the next cue's spoken line doesn't get clipped by a long-winded earlier cue.
 
-  const inputs = [];
+  // Calculate baseline duration = last cue's end_ms + 2s headroom (or natural
+  // overrun on final cue).
+  const lastCue = cueFiles[cueFiles.length - 1];
+  const baselineSec = Math.ceil(lastCue.end_ms / 1000) + Math.ceil(lastCue.natural_sec) + 2;
+
+  const inputs = ["-f", "lavfi", "-i", `anullsrc=channel_layout=stereo:sample_rate=44100:d=${baselineSec}`];
   const filterParts = [];
+  // input 0 is the silent base; cue audio inputs start at index 1
   cueFiles.forEach((c, i) => {
     inputs.push("-i", c.mp3);
-    let chain = `[${i}:a]adelay=${c.start_ms}|${c.start_ms}`;
-    // atempo only if needed: TTS overruns the slot
+    const inputIdx = i + 1; // shift past anullsrc
+    let chain = `[${inputIdx}:a]adelay=${c.start_ms}|${c.start_ms}`;
     if (c.natural_sec > c.slot_sec && c.slot_sec > 0.5) {
       const ratio = Math.min(1.4, c.natural_sec / c.slot_sec);
       chain += `,atempo=${ratio.toFixed(3)}`;
@@ -124,19 +134,18 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
     filterParts.push(chain);
   });
 
-  const mixIn = cueFiles.map((_, i) => `[a${i}]`).join("");
-  // duration=longest ensures the mix tracks the full timeline
-  // normalize=0 means we don't auto-attenuate when many cues mix (cues rarely overlap)
-  let filter = `${filterParts.join(";")};${mixIn}amix=inputs=${cueFiles.length}:duration=longest:normalize=0[mixed]`;
+  // [0:a] is the silent base; mix it with all delayed cues. duration=first
+  // anchors to the baseline so even cues delayed to minute 4+ are included.
+  const mixIn = `[0:a]` + cueFiles.map((_, i) => `[a${i}]`).join("");
+  let filter = `${filterParts.join(";")};${mixIn}amix=inputs=${cueFiles.length + 1}:duration=first:normalize=0[mixed]`;
 
-  // Optional loudnorm pass for consistent volume across cues
   let outputLabel = "[mixed]";
   if (cfg.normalize) {
     filter += `;[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[out]`;
     outputLabel = "[out]";
   }
 
-  log.info("tts", `mixing ${cueFiles.length} cues → ${voiceoverPath}`);
+  log.info("tts", `mixing ${cueFiles.length} cues → ${voiceoverPath} (baseline ${baselineSec}s)`);
   const r = spawnSync("ffmpeg", [
     "-y",
     ...inputs,
