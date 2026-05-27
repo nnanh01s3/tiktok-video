@@ -18,8 +18,9 @@
  */
 import "../env.js";
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname, basename } from "node:path";
+import { parseSRT } from "./utils/srt.mjs";
 import { DOUYIN_CONFIG } from "./config.mjs";
 import { createLogger } from "./utils/log.mjs";
 
@@ -38,19 +39,56 @@ function probeWH(mp4_path) {
   return { width: w, height: h };
 }
 
-function buildForceStyle(marginV) {
+function msToAssTs(ms) {
+  // ASS uses h:mm:ss.cc (centiseconds, not milliseconds)
+  const h = Math.floor(ms / 3600_000);
+  const m = Math.floor((ms % 3600_000) / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  const cs = Math.floor((ms % 1000) / 10);
+  return `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}.${String(cs).padStart(2,"0")}`;
+}
+
+/**
+ * Build a self-contained .ass subtitle file from our VN SRT.
+ *
+ * Why this exists: ffmpeg's `subtitles=file.srt:force_style=...` filter ignores
+ * many style properties when the source is SRT — and worse, it scales FontSize
+ * and MarginV by the implicit PlayRes ratio (defaults to 384×288 for SRT), so
+ * sub ends up at the wrong position/size. Writing a proper ASS file with our
+ * own ScriptInfo (PlayResX=output.width, PlayResY=output.height) and explicit
+ * Style line gives pixel-accurate control.
+ */
+function writeAssFromSrt({ srt_path, ass_path, marginV }) {
   const s = DOUYIN_CONFIG.subtitle;
-  return [
-    `Fontname=${s.fontName}`,
-    `FontSize=${s.fontSize}`,
-    `PrimaryColour=${s.primaryColour}`,
-    `OutlineColour=${s.outlineColour}`,
-    `BackColour=${s.backColour}`,
-    `Outline=${s.outline}`,
-    `Shadow=${s.shadow}`,
-    `MarginV=${marginV}`,
-    `Alignment=${s.alignment}`,
-  ].join(",");
+  const o = DOUYIN_CONFIG.output;
+  const cues = parseSRT(readFileSync(srt_path, "utf8"));
+
+  const header =
+`[Script Info]
+ScriptType: v4.00+
+PlayResX: ${o.width}
+PlayResY: ${o.height}
+ScaledBorderAndShadow: yes
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,${s.fontName},${s.fontSize},${s.primaryColour},${s.primaryColour},${s.outlineColour},${s.backColour},0,0,0,0,100,100,0,0,1,${s.outline},${s.shadow},${s.alignment},40,40,${marginV},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+  const events = cues.map(c => {
+    // Escape ASS-reserved chars in dialogue text
+    const text = (c.text || "")
+      .replace(/\r?\n/g, "\\N")
+      .replace(/\{/g, "(")
+      .replace(/\}/g, ")");
+    return `Dialogue: 0,${msToAssTs(c.start_ms)},${msToAssTs(c.end_ms)},Default,,0,0,0,,${text}`;
+  });
+
+  writeFileSync(ass_path, header + events.join("\n") + "\n");
+  return ass_path;
 }
 
 /**
@@ -132,22 +170,21 @@ export async function compose({ mp4_path, vn_srt_path, output_path, voiceover_pa
   const mp4Abs = resolve(mp4_path);
   const outAbs = resolve(output_path);
   const cwd = dirname(srtAbs);
-  const srtName = basename(srtAbs);
 
   // Probe source dimensions to compute letterbox + marginV
   const { width: sourceW, height: sourceH } = probeWH(mp4Abs);
   const { vf: videoFilter, marginV } = buildVideoFilter(sourceW, sourceH);
 
-  // CRITICAL: libass uses a virtual PlayRes canvas (default 384×288 for SRT
-  // without ScriptInfo header). FontSize and MarginV are interpreted in
-  // PlayRes coordinates, then scaled to output dimensions. For 1080×1920 output
-  // that's a 6.67× multiplier — MarginV=350 actually places sub at 2335px from
-  // bottom = OFF-SCREEN above top of canvas.
-  //
-  // Setting `original_size=WxH` tells libass to use the output dimensions as
-  // its PlayRes, so FontSize/MarginV are in actual pixels. This is the
-  // canonical fix for "subtitle invisible despite valid SRT" issues.
-  const vf = `${videoFilter},subtitles=${srtName}:original_size=${output.width}x${output.height}:force_style='${buildForceStyle(marginV)}'`;
+  // Convert SRT → ASS with proper PlayRes + Style. Using ffmpeg's
+  // subtitles=file.srt:force_style ignored most of our overrides because
+  // libass scaled them against the implicit PlayRes 384×288 and our
+  // computed marginV exceeded the canvas height. Writing our own ASS
+  // gives pixel-accurate control.
+  const assPath = join(cwd, "subs_vn.ass");
+  writeAssFromSrt({ srt_path: srtAbs, ass_path: assPath, marginV });
+  const assName = basename(assPath);
+
+  const vf = `${videoFilter},ass=${assName}`;
 
   // Build ffmpeg args based on whether we have a separate voiceover track
   if (voiceover_path) {
