@@ -43,16 +43,34 @@ export const DOUYIN_CONFIG = {
     height: 1920,
     fps: 30,
     crf: 23,
-    // 'ultrafast' is ~4-5x faster than 'medium' with only modest size increase.
-    // For platform redistribution (TikTok/FB/YT) this is invisible after
-    // their re-encode pass. Switch to 'medium' if you keep originals.
     preset: "ultrafast",
-    // cropTopPct=0.08 removes Douyin logo + creator handle (top band).
-    // cropBottomPct=0.18 removes the Chinese hard-subtitle band (typically at
-    // 85-95% of source height in Douyin storytelling videos) AND the Douyin
-    // bottom UI. Tune lower if you want to keep the CN sub visible.
     cropTopPct: 0.08,
     cropBottomPct: 0.18,
+    // Letterbox mode: scale to fit canvas WITHOUT cropping (decrease, not
+    // increase), pad sides with black. For landscape source this creates
+    // visible bars top+bottom and we position subtitle inside the bottom bar.
+    // For portrait source the bars are small/zero.
+    letterbox: true,
+    backgroundColor: "black",  // pad color
+  },
+
+  // TTS (Vietnamese voice-over narration)
+  tts: {
+    enabled: true,
+    // MS Edge TTS voice. Vietnamese options:
+    //   vi-VN-NamMinhNeural (male, mid-age, calm) — best for cultivation/cổ trang
+    //   vi-VN-HoaiMyNeural  (female, young)
+    voice: "vi-VN-NamMinhNeural",
+    // Speech rate. "+0%" = normal. "+15%" = faster (compress TTS to fit shorter cue
+    // durations). MS Edge accepts -50% to +200%.
+    rate: "+0%",
+    pitch: "+0Hz",
+    // Replace original CN audio entirely with VN TTS (true) or duck-mix CN at 15%
+    // under VN TTS (false). For storytelling content with single narrator
+    // overlapping in both languages, REPLACE is cleaner.
+    replaceOriginal: true,
+    // When true, normalize generated TTS loudness via loudnorm filter.
+    normalize: true,
   },
 
   // Publish channels

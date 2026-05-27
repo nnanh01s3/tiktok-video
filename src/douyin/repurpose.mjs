@@ -12,6 +12,7 @@ import { discover } from "./discover.mjs";
 import { download } from "./download.mjs";
 import { extractSubs } from "./extract-subs.mjs";
 import { translateSRT } from "./translate.mjs";
+import { generateVoiceover } from "./tts.mjs";
 import { compose } from "./compose.mjs";
 import { publish } from "./publish.mjs";
 
@@ -33,7 +34,7 @@ Options:
   --dry-run-publish        full pipeline, log caption, no post
   --skip-publish           full pipeline, no publish call
   --force-step <name>      rerun specific step despite existing artifact
-                           (download|extract-subs|translate|compose|publish)
+                           (download|extract-subs|translate|tts|compose|publish)
 `;
 
 function parseArgs() {
@@ -75,6 +76,7 @@ function artifactPaths(modal_id) {
     info_json:    join(dir, "original.info.json"),
     subs_cn:      join(dir, "subs_cn.srt"),
     subs_vn:      join(dir, "subs_vn.srt"),
+    voiceover:    join(dir, "voiceover.m4a"),
     composed:     join(dir, "composed.mp4"),
   };
 }
@@ -114,8 +116,24 @@ async function runPipelineFor(modal_id, { skipPublish, dryRunPublish, forceStep 
       });
     }
 
+    // TTS step — only when enabled in config. Idempotent like other steps:
+    // skip if voiceover.m4a exists unless --force-step tts.
+    const wantTTS = DOUYIN_CONFIG.tts?.enabled;
+    if (wantTTS && (forceStep === "tts" || !existsSync(a.voiceover))) {
+      const r = await generateVoiceover(a.subs_vn, a.dir);
+      state.upsert(modal_id, {
+        status: "tts_generated",
+        tts_cue_count: r.cue_count,
+      });
+    }
+
     if (forceStep === "compose" || !existsSync(a.composed)) {
-      await compose({ mp4_path: a.original_mp4, vn_srt_path: a.subs_vn, output_path: a.composed });
+      await compose({
+        mp4_path: a.original_mp4,
+        vn_srt_path: a.subs_vn,
+        output_path: a.composed,
+        voiceover_path: wantTTS && existsSync(a.voiceover) ? a.voiceover : null,
+      });
       state.upsert(modal_id, { status: "composed" });
     }
 
@@ -141,10 +159,12 @@ async function runPipelineFor(modal_id, { skipPublish, dryRunPublish, forceStep 
 
     log.info("orchestrator", `✅ ${modal_id} done`);
   } catch (e) {
+    const wantTTS = DOUYIN_CONFIG.tts?.enabled;
     const failureStep =
       !existsSync(a.original_mp4) ? "download_failed" :
       !existsSync(a.subs_cn) ? "subs_failed" :
       !existsSync(a.subs_vn) ? "translate_failed" :
+      (wantTTS && !existsSync(a.voiceover)) ? "tts_failed" :
       !existsSync(a.composed) ? "compose_failed" :
       "publish_failed";
     state.upsert(modal_id, { status: failureStep, last_error: e.message });
