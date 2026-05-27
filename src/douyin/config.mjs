@@ -23,17 +23,21 @@ export const DOUYIN_CONFIG = {
     cropOffsetRatio: 0.55,
   },
 
-  // Subtitle style
+  // Subtitle style.
+  // NOTE: with `original_size=1080x1920` in the subtitle filter, FontSize and
+  // MarginV are interpreted in ACTUAL output pixels. Without it, libass uses
+  // a virtual PlayRes 384×288 and scales values up ~6.67×. Compose hardcodes
+  // original_size so these values are pixel-accurate.
   subtitle: {
     fontName: "Be Vietnam Pro",
     fontFallback: "Arial Unicode MS",
-    fontSize: 18,
+    fontSize: 52,                       // ~3.7% of frame height, readable on phones
     primaryColour: "&H00FFFFFF",
     outlineColour: "&H00000000",
     backColour: "&H80000000",
-    outline: 2,
+    outline: 3,                         // thicker outline for the larger font
     shadow: 0,
-    marginV: 80,
+    marginV: 80,                        // fallback for portrait sources (no bottom bar)
     alignment: 2,
   },
 

@@ -138,7 +138,16 @@ export async function compose({ mp4_path, vn_srt_path, output_path, voiceover_pa
   const { width: sourceW, height: sourceH } = probeWH(mp4Abs);
   const { vf: videoFilter, marginV } = buildVideoFilter(sourceW, sourceH);
 
-  const vf = `${videoFilter},subtitles=${srtName}:force_style='${buildForceStyle(marginV)}'`;
+  // CRITICAL: libass uses a virtual PlayRes canvas (default 384×288 for SRT
+  // without ScriptInfo header). FontSize and MarginV are interpreted in
+  // PlayRes coordinates, then scaled to output dimensions. For 1080×1920 output
+  // that's a 6.67× multiplier — MarginV=350 actually places sub at 2335px from
+  // bottom = OFF-SCREEN above top of canvas.
+  //
+  // Setting `original_size=WxH` tells libass to use the output dimensions as
+  // its PlayRes, so FontSize/MarginV are in actual pixels. This is the
+  // canonical fix for "subtitle invisible despite valid SRT" issues.
+  const vf = `${videoFilter},subtitles=${srtName}:original_size=${output.width}x${output.height}:force_style='${buildForceStyle(marginV)}'`;
 
   // Build ffmpeg args based on whether we have a separate voiceover track
   if (voiceover_path) {
