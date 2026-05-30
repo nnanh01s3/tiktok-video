@@ -71,8 +71,11 @@ export const REELS_SOURCES = {
     { name: "Dreame Việt Nam",         platform: "tiktok",   url: "https://www.tiktok.com/@dreame.vietnam" },          // daily, official brand (robot vacuum, smart cleaning), ~956 kbps
     { name: "Philips Việt Nam",        platform: "tiktok",   url: "https://www.tiktok.com/@philips.vietnam" },         // daily, official brand (air fryer, blender, vacuum), ~647 kbps
     // ── ADDED 2026-05-22: long-format roundup channels (verified 12MB+ raw, fixes <2MB filter failures) ──
-    { name: "Hằng Đi Buôn 2",          platform: "tiktok",   url: "https://www.tiktok.com/@hangdibuon.2" },            // roundup reviews đồ gia dụng nội địa TQ, 50-111s videos, verified 12 MB raw
-    { name: "Sam Home",                platform: "tiktok",   url: "https://www.tiktok.com/@samhome_" },                // "Tổng hợp món đồ gia dụng" series, 59-75s videos, verified 11.8 MB raw
+    { name: "Hằng Đi Buôn 2",          platform: "tiktok",   url: "https://www.tiktok.com/@hangdibuon.2" },            // roundup reviews đồ gia dụng nội địa TQ, 50-111s videos, verified 12 MB raw — NOTE: drifted to travel vlogs, high off-topic rate
+    { name: "Sam Home",                platform: "tiktok",   url: "https://www.tiktok.com/@samhome_" },                // "Tổng hợp món đồ gia dụng" series, 59-75s videos, verified 11.8 MB raw — NOTE: drifted, high off-topic rate
+    // ── ADDED 2026-05-31: long-format "thử nghiệm/review có thật sự" archetype (verified 7/8 vids ≥40s, 1080p 14-18MB raw). ──
+    // Mixed topics (~50% gia_dung, ~50% beauty/toy) but on-topic clips are 2-3min → reliably >2MB after FFmpeg. The "đủ dài để qua bitrate filter" win gia_dung lacked.
+    { name: "Bếp Nhà Thỏ Phương Chi",  platform: "tiktok",   url: "https://www.tiktok.com/@bepnhathophuongchi" },     // 99-229s long-format product reviews, 1080p ~14-18MB raw, active 2026-05
   ],
 
   // ── tech (Đồ Công Nghệ) — gadgets, phone, reviews ──
@@ -116,7 +119,7 @@ export const REELS_SOURCES = {
     { name: "Phương Thảo Makeup", platform: "tiktok",   url: "https://www.tiktok.com/@phuongthao.makeup" }, // daily, makeup tutorials, 6+ MB raw bitrate
     { name: "Shiseido Vietnam",  platform: "tiktok",   url: "https://www.tiktok.com/@shiseido.vietnam" },  // weekly, official brand (phấn má, highlight, skincare)
     // ── ADDED 2026-05-18: high-view rotation expansion (verified active + bitrate) ──
-    { name: "HannahOlala",       platform: "tiktok",   url: "https://www.tiktok.com/@hannaholala" },        // daily, beauty/skincare KOL (founder Candid Skincare), 16.6 MB raw
+    // REMOVED 2026-05-27: HannahOlala (user request)
     { name: "Tom Skincare",      platform: "tiktok",   url: "https://www.tiktok.com/@tomskincare" },        // daily, minimalist skincare routines/reviews, 8.4 MB raw
     { name: "Hoàng Minh Ngọc",  platform: "tiktok",   url: "https://www.tiktok.com/@hoangminhngoc21" },    // daily, Gen Z beauty (makeup, mỹ phẩm), ~1.1M, 6.2 MB raw
     { name: "HTX Beauty",        platform: "tiktok",   url: "https://www.tiktok.com/@htxbeauty.lc" },       // daily, beauty-blogger collective (makeup/skincare/son), 12.9 MB raw
