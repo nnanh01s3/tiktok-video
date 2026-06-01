@@ -203,6 +203,7 @@ async function scrapeYtdlp(profileUrl, platformLabel = "TikTok") {
         url: j.url,
         title: j.title || "",
         duration: j.duration || 0,
+        track: j.track || "", // TikTok audio label — used for FB-mute risk scoring
       });
     } catch {}
   }
@@ -534,6 +535,26 @@ if (recentSources.size > 0) {
   log(`   🔄 Reorder: ${freshCount} fresh-source candidates first, ${newVideos.length - freshCount} recent-source last`);
 }
 
+// ── Soft audio-safety prefer: avoid FB Rights Manager audio mute ──
+// FB fingerprints the actual audio track. TikTok's `track` field is a strong
+// proxy: "âm thanh gốc"/"original sound" = creator voiceover → safe; a named
+// commercial song = high risk of being muted on FB. We do NOT reject risky
+// videos — just sort them LAST, so safe-audio candidates are evaluated first
+// and a commercial-track video only gets used when nothing safer is available.
+// Runs AFTER the recent-source sort so audio-safety is the PRIMARY key and
+// source-freshness the secondary tiebreaker (stable sort preserves it).
+function audioRisk(track) {
+  const t = (track || "").trim().toLowerCase();
+  if (!t) return 1; // unknown (e.g. Facebook-sourced videos) → neutral middle
+  if (t.startsWith("âm thanh gốc") || t.startsWith("original sound")) return 0; // safe
+  if (t.startsWith("nhạc nền")) return 1; // creator's own background → medium
+  return 2; // named commercial track → high mute risk
+}
+newVideos.sort((a, b) => audioRisk(a.track) - audioRisk(b.track));
+const safeCount = newVideos.filter((v) => audioRisk(v.track) === 0).length;
+const riskyCount = newVideos.filter((v) => audioRisk(v.track) === 2).length;
+log(`   🔊 Audio: ${safeCount} safe (âm thanh gốc) first, ${riskyCount} commercial-track last`);
+
 // Try all candidates, stop when we've posted MAX successfully
 const toProcess = newVideos;
 log(`📌 ${toProcess.length} candidates, target ${MAX} post(s)\n`);
@@ -542,7 +563,9 @@ let success = 0;
 for (let i = 0; i < toProcess.length; i++) {
   if (success >= MAX) break;
   const video = toProcess[i];
-  log(`\n[${success + 1}/${MAX}] ${video._sourceName} — ${video.id}`);
+  const _risk = audioRisk(video.track);
+  const _riskLabel = _risk === 0 ? "🔊safe" : _risk === 2 ? "⚠️commercial-audio" : "🔉unknown/bg";
+  log(`\n[${success + 1}/${MAX}] ${video._sourceName} — ${video.id} [${_riskLabel}${video.track ? `: ${video.track}` : ""}]`);
 
   // ── Topic classifier gate (pre-download, skip off-topic) ──
   let verdict;
