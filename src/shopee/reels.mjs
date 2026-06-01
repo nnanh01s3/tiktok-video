@@ -481,9 +481,20 @@ for (let step = 0; step < SOURCES.length; step++) {
   const src = SOURCES[idx];
   triedSources.push(idx);
 
-  const videos = src.platform === "facebook"
-    ? await scrapeFacebook(src.url)
-    : await scrapeYtdlp(src.url, src.platform === "youtube" ? "YouTube" : "TikTok");
+  // Fault isolation: one source failing (e.g. Facebook CDP timeout) must NOT
+  // kill the whole worker. Before this try/catch, a thrown "CDP timeout"
+  // escaped to the global uncaughtException handler → process.exit(1),
+  // discarding 30+ already-pooled candidates from other sources. Now a
+  // single source failure just skips that source and continues.
+  let videos = [];
+  try {
+    videos = src.platform === "facebook"
+      ? await scrapeFacebook(src.url)
+      : await scrapeYtdlp(src.url, src.platform === "youtube" ? "YouTube" : "TikTok");
+  } catch (e) {
+    log(`   ⚠ Scrape failed [${idx}] ${src.name}: ${e?.message || e} — skipping source`);
+    continue;
+  }
 
   let addedFromSource = 0;
   for (const v of videos) {
