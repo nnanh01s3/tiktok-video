@@ -10,10 +10,10 @@
  *   4. Skip if already in SQLite posted_reels (global, cross-page blocklist)
  *      + classifier reject (Gemini Flash — title vs PAGES[page].topic)
  *   5. Download via yt-dlp
- *   6. FFmpeg: crop 9:16 (center), trim to ≤60s, remove TikTok watermark
+ *   6. FFmpeg: crop 9:16 (center), cap at ≤180s, remove TikTok watermark
  *      by cropping ~8% off the right side (where TT watermark sits)
- *   7. Upload → PostForMe scheduleFacebook (Reels auto-detected by FB for
- *      9:16 vertical videos ≤90s)
+ *   7. Upload → PostForMe scheduleFacebook (Reels auto-detected by FB;
+ *      Meta dropped Reels duration limits Jun 2025, so full-length is fine)
  *
  * Usage:
  *   node src/shopee/reels.mjs --page <niche> --delay <minutes>
@@ -357,7 +357,10 @@ function downloadVideo(video) {
  *   - Crop to 9:16 vertical (if source is different ratio)
  *   - Crop ~5% off each edge to remove TikTok watermark + username overlay
  *     (TT watermark at top-left or bottom-right, usernames at bottom)
- *   - Trim to ≤60s (Reels sweet spot for algorithm)
+ *   - Cap at ≤180s (3 min). Meta dropped Reels duration limits in Jun 2025,
+ *     so we keep full content; 180s only guards against pathological inputs.
+ *     (Was -t 60, which truncated ~32% of long-format review/roundup videos —
+ *      e.g. a 153s review cut to 60s lost 61% incl. the conclusion.)
  *   - Re-encode at 1080x1920 for FB Reels
  */
 function processVideo(inputPath, outputPath) {
@@ -381,7 +384,7 @@ function processVideo(inputPath, outputPath) {
   ].join(",");
 
   const cmd =
-    `"${FFMPEG}" -y -i "${inputPath}" -t 60 -vf "${filter}" ` +
+    `"${FFMPEG}" -y -i "${inputPath}" -t 180 -vf "${filter}" ` +
     `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p ` +
     `-c:a aac -b:a 128k -ar 44100 ` +
     `-movflags +faststart "${outputPath}"`;
