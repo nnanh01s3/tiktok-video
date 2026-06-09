@@ -18,7 +18,10 @@ const log = createLogger(DOUYIN_CONFIG.logFile);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function buildSearchUrl(keyword) {
-  return `https://www.douyin.com/search/${encodeURIComponent(keyword)}?type=general`;
+  // /jingxuan/search/ (curated search) loads results in a stable cards layout
+  // even for logged-in sessions. /search/ alone tends to render empty in
+  // automated browsers (anti-bot or React route mismatch).
+  return `https://www.douyin.com/jingxuan/search/${encodeURIComponent(keyword)}?type=general`;
 }
 
 export async function discover({ keyword, creator, maxResults = DOUYIN_CONFIG.maxPerRun }) {
@@ -27,6 +30,8 @@ export async function discover({ keyword, creator, maxResults = DOUYIN_CONFIG.ma
   log.info("discover", `→ ${url}`);
 
   const candidates = await withDouyinChrome(url, async (cdp) => {
+    // Wait for initial render then scroll to load lazy cards
+    await sleep(3000);
     for (let i = 0; i < 8; i++) {
       await cdp("Runtime.evaluate", {
         expression: "window.scrollTo(0, document.body.scrollHeight)",
@@ -38,22 +43,33 @@ export async function discover({ keyword, creator, maxResults = DOUYIN_CONFIG.ma
       returnByValue: true,
       expression: `
         (() => {
-          const links = [...document.querySelectorAll('a[href*="/video/"]')];
+          // Douyin's jingxuan-search renders cards as <li data-id="..." data-text="...">.
+          // Class names are webpack-mangled so we anchor on data-* attributes.
+          // Fallback: any element with data-id matching a 19-digit aweme id.
+          const cards = [...document.querySelectorAll('li[data-id][data-text], div[data-id][data-text]')];
           const seen = new Set();
           const out = [];
-          for (const a of links) {
-            const m = a.href.match(/\\/video\\/(\\d+)/);
-            if (!m) continue;
-            const id = m[1];
+          for (const card of cards) {
+            const id = card.getAttribute('data-id');
+            if (!/^\\d{15,20}$/.test(id || '')) continue;
             if (seen.has(id)) continue;
             seen.add(id);
-            const titleEl = a.querySelector('[data-e2e="search-card-title"], img[alt]');
-            const title = titleEl?.innerText || titleEl?.getAttribute('alt') || '';
-            let viewText = '';
-            const txt = a.innerText || '';
-            const vm = txt.match(/([\\d.]+\\s*[万wk万])/i);
-            if (vm) viewText = vm[1];
-            out.push({ modal_id: id, url: a.href, title, view_text: viewText });
+            const title = card.getAttribute('data-text') || '';
+            const txt = card.innerText || '';
+            // Match view count like '2.3万' / '12k' / '1.5w'. View label varies
+            // by locale ('点赞' for likes, '观看' for views).
+            const vm = txt.match(/([0-9]+(?:\\.[0-9]+)?\\s*[万wk])/i);
+            const view_text = vm ? vm[1] : '';
+            // Duration label like '10:49' / '03:13' often appears in card text.
+            const dm = txt.match(/\\b([0-9]{1,2}:[0-9]{2})\\b/);
+            const duration_text = dm ? dm[1] : '';
+            out.push({
+              modal_id: id,
+              url: 'https://www.douyin.com/video/' + id,
+              title,
+              view_text,
+              duration_text,
+            });
           }
           return out;
         })()
@@ -61,7 +77,7 @@ export async function discover({ keyword, creator, maxResults = DOUYIN_CONFIG.ma
     });
 
     return evalRes?.result?.value || [];
-  });
+  }, { headless: false, waitMs: 6000 });
 
   if (!candidates.length) {
     mkdirSync(DOUYIN_CONFIG.baseDir, { recursive: true });
