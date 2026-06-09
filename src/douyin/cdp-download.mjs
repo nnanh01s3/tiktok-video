@@ -64,12 +64,16 @@ export async function cdpDownload(modal_id) {
   const videoPageUrl = `https://www.douyin.com/video/${modal_id}`;
   mkdirSync(DOUYIN_CONFIG.chromeUserDataDir, { recursive: true });
 
-  log.info("cdp-download", `launching Chrome on port ${port}`);
+  // Non-headless required: Douyin fingerprints headless Chrome and serves
+  // captcha intermediate page (验证码中间页) instead of the video player.
+  // Same root cause as discover.mjs needing headless: false for search.
+  log.info("cdp-download", `launching Chrome (windowed) on port ${port}`);
   const proc = spawn(`"${DOUYIN_CONFIG.chromePath}"`, [
-    "--headless=new",
+    "--start-minimized",
     "--disable-gpu",
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${DOUYIN_CONFIG.chromeUserDataDir}`,
+    "--window-size=1280,800",
     "--no-first-run",
     "--disable-blink-features=AutomationControlled",
     "--autoplay-policy=no-user-gesture-required",
