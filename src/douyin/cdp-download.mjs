@@ -154,14 +154,22 @@ export async function cdpDownload(modal_id) {
     // Force navigation (in case Chrome arg URL didn't trigger)
     await cdp("Page.navigate", { url: videoPageUrl });
 
-    // Wait for video to load + try to trigger play
-    await sleep(8000);
-    try {
-      await cdp("Runtime.evaluate", {
-        expression: "document.querySelectorAll('video').forEach(v => { v.muted = true; v.play().catch(()=>{}); })"
-      });
-    } catch {}
-    await sleep(8000);
+    // Wait for video to load + try to trigger play. Loop until network shows
+    // a real video CDN URL (not just the loading-spinner static asset).
+    await sleep(5000);
+    let attemptedPlay = false;
+    for (let waitAttempt = 0; waitAttempt < 6; waitAttempt++) {
+      try {
+        await cdp("Runtime.evaluate", {
+          expression: "document.querySelectorAll('video').forEach(v => { v.muted = true; v.play().catch(()=>{}); })",
+        });
+        attemptedPlay = true;
+      } catch {}
+      // Check whether any REAL video URL has been captured (not just spinner)
+      const realCount = [...videoCandidates.keys()].filter(u => VIDEO_HOSTS.test(u)).length;
+      if (realCount >= 1) break;
+      await sleep(3000);
+    }
 
     // Capture page metadata (title, description)
     let infoMeta = {};
@@ -173,7 +181,9 @@ export async function cdpDownload(modal_id) {
       infoMeta = JSON.parse(titleRes?.result?.value || "{}");
     } catch {}
 
-    // Try to extract video URL directly from <video> element too
+    // Try to extract video URL directly from <video> element too — BUT apply
+    // the same STATIC_HOSTS guard so we don't accidentally adopt the loading-
+    // spinner asset (lf-douyin-pc-web.douyinstatic.com/.../uuu_265.mp4).
     let videoSrcFromDom = null;
     try {
       const r = await cdp("Runtime.evaluate", {
@@ -181,10 +191,16 @@ export async function cdpDownload(modal_id) {
         returnByValue: true,
       });
       videoSrcFromDom = r?.result?.value || null;
-      if (videoSrcFromDom && videoSrcFromDom.startsWith("http")) {
+      if (videoSrcFromDom && videoSrcFromDom.startsWith("http") && !STATIC_HOSTS.test(videoSrcFromDom)) {
         videoCandidates.set(videoSrcFromDom, { type: "video/mp4", source: "dom" });
       }
     } catch {}
+
+    // Filter out any static-host URL that may have slipped through (e.g.,
+    // the spinner anim if it raced past the response listener).
+    for (const u of [...videoCandidates.keys()]) {
+      if (STATIC_HOSTS.test(u)) videoCandidates.delete(u);
+    }
 
     log.info("cdp-download", `captured ${videoCandidates.size} video URL candidates`);
     for (const [url, meta] of videoCandidates) {
