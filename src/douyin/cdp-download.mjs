@@ -66,14 +66,16 @@ export async function cdpDownload(modal_id) {
 
   // Non-headless required: Douyin fingerprints headless Chrome and serves
   // captcha intermediate page (验证码中间页) instead of the video player.
-  // Same root cause as discover.mjs needing headless: false for search.
+  // CANNOT use --start-minimized either — minimized Chrome throttles render
+  // pipeline and the video element never advances past the loading spinner.
+  // Visible window is the only mode where the player actually streams.
   log.info("cdp-download", `launching Chrome (windowed) on port ${port}`);
   const proc = spawn(`"${DOUYIN_CONFIG.chromePath}"`, [
-    "--start-minimized",
     "--disable-gpu",
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${DOUYIN_CONFIG.chromeUserDataDir}`,
     "--window-size=1280,800",
+    "--window-position=0,0",
     "--no-first-run",
     "--disable-blink-features=AutomationControlled",
     "--autoplay-policy=no-user-gesture-required",
