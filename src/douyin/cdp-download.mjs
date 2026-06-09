@@ -157,6 +157,26 @@ export async function cdpDownload(modal_id) {
     // Wait for video to load + try to trigger play. Loop until network shows
     // a real video CDN URL (not just the loading-spinner static asset).
     await sleep(5000);
+
+    // Early exit: detect "video does not exist" sentinel. Douyin renders
+    // 你要观看的视频不存在 on the deleted/private/removed video pages and
+    // never serves a real video URL — looping just wastes wall time.
+    try {
+      const notFoundRes = await cdp("Runtime.evaluate", {
+        expression: "document.body && document.body.innerText.includes('视频不存在')",
+        returnByValue: true,
+      });
+      if (notFoundRes?.result?.value === true) {
+        // Throw a distinct error code the orchestrator can map to "skipped"
+        const err = new Error(`Douyin video ${modal_id} no longer exists`);
+        err.code = "VIDEO_NOT_AVAILABLE";
+        throw err;
+      }
+    } catch (e) {
+      if (e.code === "VIDEO_NOT_AVAILABLE") throw e;
+      // else: ignore CDP error, keep retrying play
+    }
+
     let attemptedPlay = false;
     for (let waitAttempt = 0; waitAttempt < 6; waitAttempt++) {
       try {

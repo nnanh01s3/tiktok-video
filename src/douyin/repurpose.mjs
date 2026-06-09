@@ -159,6 +159,12 @@ async function runPipelineFor(modal_id, { skipPublish, dryRunPublish, forceStep 
 
     log.info("orchestrator", `✅ ${modal_id} done`);
   } catch (e) {
+    // Map error codes to skip-vs-fail
+    if (e?.code === "VIDEO_NOT_AVAILABLE") {
+      state.upsert(modal_id, { status: "skipped", last_error: e.message });
+      log.warn("orchestrator", `⊘ ${modal_id} skipped (video deleted/unavailable)`);
+      return;
+    }
     const wantTTS = DOUYIN_CONFIG.tts?.enabled;
     const failureStep =
       !existsSync(a.original_mp4) ? "download_failed" :
