@@ -11,7 +11,9 @@ import { DOUYIN_CONFIG } from "../src/douyin/config.mjs";
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 const arg = process.argv[2] || "百岁觉醒";
-const url = /^\d{15,20}$/.test(arg)
+const url = /^https?:\/\//.test(arg)
+  ? arg
+  : /^\d{15,20}$/.test(arg)
   ? `https://www.douyin.com/video/${arg}`
   : `https://www.douyin.com/jingxuan/search/${encodeURIComponent(arg)}?type=general`;
 

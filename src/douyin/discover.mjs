@@ -43,34 +43,53 @@ export async function discover({ keyword, creator, maxResults = DOUYIN_CONFIG.ma
       returnByValue: true,
       expression: `
         (() => {
-          // Douyin's jingxuan-search renders cards as <li data-id="..." data-text="...">.
-          // Class names are webpack-mangled so we anchor on data-* attributes.
-          // Fallback: any element with data-id matching a 19-digit aweme id.
-          const cards = [...document.querySelectorAll('li[data-id][data-text], div[data-id][data-text]')];
           const seen = new Set();
           const out = [];
-          for (const card of cards) {
+
+          // PATTERN 1: search/jingxuan pages
+          // <li data-id="..." data-text="...">
+          for (const card of document.querySelectorAll('li[data-id][data-text], div[data-id][data-text]')) {
             const id = card.getAttribute('data-id');
             if (!/^\\d{15,20}$/.test(id || '')) continue;
             if (seen.has(id)) continue;
             seen.add(id);
             const title = card.getAttribute('data-text') || '';
             const txt = card.innerText || '';
-            // Match view count like '2.3万' / '12k' / '1.5w'. View label varies
-            // by locale ('点赞' for likes, '观看' for views).
             const vm = txt.match(/([0-9]+(?:\\.[0-9]+)?\\s*[万wk])/i);
-            const view_text = vm ? vm[1] : '';
-            // Duration label like '10:49' / '03:13' often appears in card text.
             const dm = txt.match(/\\b([0-9]{1,2}:[0-9]{2})\\b/);
-            const duration_text = dm ? dm[1] : '';
             out.push({
               modal_id: id,
               url: 'https://www.douyin.com/video/' + id,
               title,
-              view_text,
-              duration_text,
+              view_text: vm ? vm[1] : '',
+              duration_text: dm ? dm[1] : '',
             });
           }
+
+          // PATTERN 2: creator profile pages
+          // <a href="/video/{id}"> with optional title from nested img alt
+          for (const a of document.querySelectorAll('a[href*="/video/"]')) {
+            const m = a.href.match(/\\/video\\/(\\d{15,20})/);
+            if (!m) continue;
+            const id = m[1];
+            if (seen.has(id)) continue;
+            seen.add(id);
+            const img = a.querySelector('img[alt]');
+            const title = img?.getAttribute('alt') || a.innerText?.split('\\n')[0]?.trim() || '';
+            const txt = a.innerText || '';
+            const vm = txt.match(/([0-9]+(?:\\.[0-9]+)?\\s*[万wk])/i);
+            const dm = txt.match(/\\b([0-9]{1,2}:[0-9]{2})\\b/);
+            out.push({
+              modal_id: id,
+              url: 'https://www.douyin.com/video/' + id,
+              title,
+              view_text: vm ? vm[1] : '',
+              duration_text: dm ? dm[1] : '',
+            });
+          }
+
+          // Sort newest first (modal_id encodes timestamp)
+          out.sort((a, b) => BigInt(b.modal_id) > BigInt(a.modal_id) ? 1 : -1);
           return out;
         })()
       `,
