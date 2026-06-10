@@ -186,6 +186,15 @@ export const REELS_SOURCES = {
     { name: "ProLifting VN",         platform: "tiktok",   url: "https://www.tiktok.com/@prolifting.vn" },   // daily, weightlifting/powerlifting technique, 16.0 MB raw
     { name: "Ngô Thuý Mông Kong",   platform: "tiktok",   url: "https://www.tiktok.com/@ngothuy.mongkong" }, // daily, gym glute/thigh training, 6.2 MB raw
     { name: "Net Việt Fitness Yoga", platform: "tiktok",   url: "https://www.tiktok.com/@fitness.yoga.netviet" }, // daily, fitness + yoga workouts, 44 MB raw
+    // ── ADDED 2026-06-10: BÓNG ĐÁ sources (user request — page had zero football content).
+    // All verified via 3-stage funnel: active ≤5 days, ≥30s majority, 1080p ≥4MB raw, "âm thanh gốc"
+    // majority (FB-mute safe). Original-filming skills/freestyle/futsal only — NO broadcast
+    // match highlights (FB Rights Manager flags broadcast football footage → page strike risk).
+    { name: "Việt Anh Football",       platform: "tiktok", url: "https://www.tiktok.com/@viet_anh_219" },          // freestyle 2.7M, TikTok Awards Best Sports Creator 2024, 39-96s
+    { name: "Đỗ Kim Phúc",             platform: "tiktok", url: "https://www.tiktok.com/@dokimphuc.official" },    // freestyle/analysis, 42-99s, 100% âm thanh gốc, 10MB/71s
+    { name: "Nguyễn Duy Trung",        platform: "tiktok", url: "https://www.tiktok.com/@duytrung.official" },     // skill creator (Trung Spin Kick), 1M, all videos 32s+
+    { name: "Văn Anh Neymar",          platform: "tiktok", url: "https://www.tiktok.com/@vananhneymar" },          // Sport Creator of the Year 2025, challenges/journey, 34-75s
+    { name: "Nguyễn Đắc Huy (Futsal)", platform: "tiktok", url: "https://www.tiktok.com/@nguyendachuy_official" }, // futsal nat'l team, training/matches; ~30% clips <30s get filtered
   ],
 
   // ── bach_hoa (Bách Hóa Online) — general life hacks ──

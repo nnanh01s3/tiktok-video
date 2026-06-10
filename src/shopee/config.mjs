@@ -119,7 +119,7 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.the_thao,
     caption: { platform: "facebook", niche: "đồ thể thao outdoor Shopee", pageName: "Thể Thao & Outdoor" },
     postComments: false,
-    topic: "Tập gym, workout tại nhà, yoga, cardio, kỹ thuật tập tạ, transformation trước-sau, tips giảm cân, fitness outdoor, chạy bộ, đồ tập. KHÔNG bao gồm: bóng ma hạnh phúc (trend), dance cover, vlog ăn uống thuần.",
+    topic: "Tập gym, workout tại nhà, yoga, cardio, kỹ thuật tập tạ, transformation trước-sau, tips giảm cân, fitness outdoor, chạy bộ, đồ tập, bóng đá (freestyle, kỹ thuật, skill challenge, bóng đá phủi, futsal, tâng bóng). KHÔNG bao gồm: bóng ma hạnh phúc (trend), dance cover, vlog ăn uống thuần, highlight trận đấu bản quyền truyền hình.",
     strategy: "bestseller",
     veoHookConfig: { style: "urgent", targetDuration: 60 },
   },
@@ -160,6 +160,6 @@ export const TRENDING_CONFIG = {
 export const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 export const FFPROBE = process.env.FFPROBE_PATH || "ffprobe";
 export const FONT = process.env.FONT_PATH || "C:/Windows/Fonts/arial.ttf";
-export const BASE_DIR = "D:/tiktok/data/shopee";
+export const BASE_DIR = process.env.BASE_DIR || "D:/tiktok/data/shopee";
 export const MAX_PER_DAY = 12;
 export const MAX_PER_RUN = 1; // 1 video per page per daily run (was 2)
