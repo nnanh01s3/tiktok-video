@@ -150,7 +150,7 @@ export const REELS_SOURCES = {
     { name: "Salim Official",     platform: "tiktok",   url: "https://www.tiktok.com/@salim_official" },
     { name: "Isis Min",           platform: "facebook", url: "https://www.facebook.com/isismin.vietnam" },
     // ── NEW: high-frequency ──
-    { name: "BabyKopo Home",     platform: "tiktok",   url: "https://www.tiktok.com/@babykopohome" },      // daily+, 6.7M, mom life + cooking
+    // REMOVED 2026-06-10: BabyKopo Home (@babykopohome) — frequent copyright claims on reposts (user request)
     { name: "Xoài Fam (Trang Lou)", platform: "tiktok", url: "https://www.tiktok.com/@xoaifam" },          // daily, 797K, mom-baby lifestyle
     { name: "Gia Đình Cam Cam",  platform: "tiktok",   url: "https://www.tiktok.com/@giadinhcamcam" },     // daily, 725K, family vlogs + tips
     { name: "Nguyễn Vy Family",  platform: "tiktok",   url: "https://www.tiktok.com/@nguyenvy1234567" },   // daily, 1M, #1 family TikTok VN
