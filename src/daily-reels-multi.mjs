@@ -88,12 +88,13 @@ function getStartDayOffset() {
 
 const START_DAY = getStartDayOffset();
 
-// ── 4-slot schedule (VN time) — MUST match daily-reels.mjs ────────────────
+// ── 5-slot schedule (VN time) — MUST match daily-reels.mjs (23h added 2026-06-11) ──
 const SLOTS = [
   ["6:00",  "6:30",  "sáng"],
   ["11:00", "11:30", "trưa"],
   ["17:00", "17:30", "chiều"],
   ["21:00", "21:30", "tối"],
+  ["23:00", "23:30", "đêm"],
 ];
 
 const REEL_PAGES = [

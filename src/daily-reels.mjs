@@ -37,13 +37,14 @@ function arg(name, fallback = null) {
 
 const SKIP_PAGES = (arg("--skip-page", "") || "").split(",").filter(Boolean);
 
-// ── 4-slot schedule (VN time) ─────────────────────────────────────────────
+// ── 5-slot schedule (VN time) — 23h slot added 2026-06-11 per user ────────
 // Each slot: [startHH:MM, endHH:MM, label]
 const SLOTS = [
   ["6:00",  "6:30",  "sáng"],
   ["11:00", "11:30", "trưa"],
   ["17:00", "17:30", "chiều"],
   ["21:00", "21:30", "tối"],
+  ["23:00", "23:30", "đêm"],
 ];
 
 /**
