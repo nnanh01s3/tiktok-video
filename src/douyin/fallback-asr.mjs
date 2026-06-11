@@ -27,12 +27,12 @@ const ASR_MODELS = ["gemini-2.5-pro", "gemini-2.5-flash"];
 
 function buildPrompt({ durationSec, attempt }) {
   const stricter = attempt > 1
-    ? `\n\n⚠ CRITICAL: previous attempt only transcribed the first part of the video and missed most of the content. You MUST transcribe ALL speech from start to end. Do NOT stop early. The video continues until ${durationSec}s — your LAST cue's end-time MUST be within 10s of that.`
+    ? `\n\n⚠ CRITICAL: previous attempt only transcribed the first part of the audio and missed most of the content. You MUST transcribe ALL speech from start to end. Do NOT stop early. The audio continues until ${durationSec}s — your LAST cue's end-time MUST be within 10s of that.`
     : "";
 
-  return `You are transcribing a Chinese-language video into SRT subtitle format.
+  return `You are transcribing a Chinese-language audio track into SRT subtitle format.
 
-The video duration is **${durationSec} seconds**. You MUST transcribe speech across the ENTIRE duration — from 0s until ${durationSec}s — not just the beginning.
+The audio duration is **${durationSec} seconds**. You MUST transcribe speech across the ENTIRE duration — from 0s until ${durationSec}s — not just the beginning.
 
 Output requirements:
 - Standard SRT: cue number, timestamp range "HH:MM:SS,mmm --> HH:MM:SS,mmm", text on next line, blank line between cues.
@@ -41,7 +41,7 @@ Output requirements:
 - Cover the FULL ${durationSec}s — the last cue's end timestamp should be close to ${durationSec}s.
 - Expect approximately ${Math.max(15, Math.round(durationSec / 4))} cues for this duration (one cue every ~4 seconds on average).
 - Output ONLY the raw SRT content. No markdown fences. No commentary. No "here is the transcription".
-- If the video genuinely has no speech, output the literal string "NO_SPEECH" (nothing else).${stricter}`;
+- If the audio genuinely has no speech, output the literal string "NO_SPEECH" (nothing else).${stricter}`;
 }
 
 function stripCodeFence(s) {
@@ -58,14 +58,35 @@ function probeDurationSec(mp4_path) {
   return d;
 }
 
-async function callGemini(mp4_path, prompt, model) {
+/**
+ * Extract mono AAC audio from the video for upload.
+ *
+ * Why audio-only instead of the full video:
+ * 1. Upload size: 832s video ≈ 50MB; same audio at 64kbps mono ≈ 6.6MB.
+ *    Large video uploads crash the Gemini SDK with an unhandled socket
+ *    'write EOF' event that kills the whole node process.
+ * 2. Token cost: Gemini charges ~263 tokens/s for video (frames included)
+ *    vs ~32 tokens/s for audio — 8x cheaper for pure transcription.
+ */
+function extractAudio(mp4_path) {
+  const audioPath = join(dirname(mp4_path), "asr_audio.m4a");
+  const r = spawnSync("ffmpeg", [
+    "-y", "-i", mp4_path,
+    "-vn", "-ac", "1", "-c:a", "aac", "-b:a", "64k",
+    audioPath,
+  ], { encoding: "utf8", timeout: 300_000, maxBuffer: 50 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`audio extract failed: ${(r.stderr || "").slice(-500)}`);
+  return audioPath;
+}
+
+async function callGemini(audio_path, prompt, model) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
   const ai = new GoogleGenAI({ apiKey });
 
   const uploaded = await ai.files.upload({
-    file: mp4_path,
-    config: { mimeType: "video/mp4" },
+    file: audio_path,
+    config: { mimeType: "audio/mp4" },
   });
 
   let info = uploaded;
@@ -80,7 +101,7 @@ async function callGemini(mp4_path, prompt, model) {
   const res = await ai.models.generateContent({
     model,
     contents: [
-      { fileData: { fileUri: info.uri, mimeType: "video/mp4" } },
+      { fileData: { fileUri: info.uri, mimeType: "audio/mp4" } },
       { text: prompt },
     ],
     config: { maxOutputTokens: 16384 },
@@ -109,6 +130,10 @@ export async function asrFallback(mp4_path) {
   const coverageThresholdSec = durationSec * 0.85;
   log.info("fallback-asr", `video duration: ${durationSec}s, requiring coverage >= ${coverageThresholdSec.toFixed(0)}s`);
 
+  // Extract audio once, reuse across all model attempts
+  const audioPath = extractAudio(mp4_path);
+  log.info("fallback-asr", `extracted audio for upload: ${audioPath}`);
+
   let lastErr;
   let bestCues = null;
   let bestCoverage = 0;
@@ -120,7 +145,7 @@ export async function asrFallback(mp4_path) {
       try {
         log.info("fallback-asr", `${model} attempt ${attempt}/2`);
         const { raw, stripped } = await callGemini(
-          mp4_path, buildPrompt({ durationSec, attempt }), model
+          audioPath, buildPrompt({ durationSec, attempt }), model
         );
 
         if (stripped.trim() === "NO_SPEECH") {
