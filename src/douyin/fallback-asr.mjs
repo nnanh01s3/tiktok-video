@@ -104,9 +104,21 @@ async function callGemini(audio_path, prompt, model) {
       { fileData: { fileUri: info.uri, mimeType: "audio/mp4" } },
       { text: prompt },
     ],
-    config: { maxOutputTokens: 16384 },
+    config: { maxOutputTokens: 32768 },
   });
   const text = res.text || res.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+  // Surface WHY the response is empty — finishReason tells us if we hit
+  // MAX_TOKENS (thinking ate the budget), RECITATION (copyright block),
+  // SAFETY, etc. Without this, empty responses are undiagnosable.
+  if (!text) {
+    const finishReason = res.candidates?.[0]?.finishReason || "unknown";
+    const blockReason = res.promptFeedback?.blockReason || "none";
+    const usage = res.usageMetadata
+      ? `prompt=${res.usageMetadata.promptTokenCount} thoughts=${res.usageMetadata.thoughtsTokenCount ?? 0} out=${res.usageMetadata.candidatesTokenCount ?? 0}`
+      : "n/a";
+    log.warn("fallback-asr", `${model} empty response: finishReason=${finishReason} blockReason=${blockReason} usage=${usage}`);
+  }
 
   try { await ai.files.delete({ name: info.name }); } catch {}
 
@@ -159,7 +171,24 @@ export async function asrFallback(mp4_path) {
           throw new Error(`${model} returned 0 parseable cues (raw len=${raw.length}, stripped len=${stripped.length})`);
         }
 
+        // Sanity: timestamps must stay within the audio. Flash has been seen
+        // hallucinating cues ending at 3780s on an 832s track — which then
+        // "won" the coverage check. Reject any transcript whose last cue
+        // exceeds duration by >10%.
         const lastEndSec = cues[cues.length - 1].end_ms / 1000;
+        if (lastEndSec > durationSec * 1.1) {
+          dumpDebug(mp4_path, model, attempt, raw);
+          throw new Error(`${model} hallucinated timestamps: last cue ${lastEndSec.toFixed(0)}s > audio ${durationSec}s`);
+        }
+
+        // Sanity: density. Storytelling narration runs ~1 cue per 3-5s.
+        // Fewer than 1 cue per 20s of audio means most speech was skipped.
+        const minCues = Math.max(5, Math.floor(durationSec / 20));
+        if (cues.length < minCues) {
+          dumpDebug(mp4_path, model, attempt, raw);
+          throw new Error(`${model} too sparse: ${cues.length} cues for ${durationSec}s (need >= ${minCues})`);
+        }
+
         const coverage = lastEndSec / durationSec;
         log.info("fallback-asr",
           `${model} attempt ${attempt}: ${cues.length} cues, coverage ${(coverage * 100).toFixed(0)}% (last cue ends ${lastEndSec.toFixed(1)}s / ${durationSec}s)`
