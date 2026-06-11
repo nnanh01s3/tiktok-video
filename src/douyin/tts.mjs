@@ -76,11 +76,29 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
 
   // Step 1: render each cue to its own mp3 file. Track natural duration so
   // we can compute atempo when a cue overruns its allotted SRT window.
+  //
+  // Edge TTS rate-limits rapid sequential requests — symptoms: alternating
+  // cues return 0 bytes (cue 4,6,7,9 fail while 5,8 succeed). Mitigation:
+  // small inter-cue delay + per-cue retry with backoff.
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const cueFiles = [];
   for (const cue of cues) {
     const mp3path = join(ttsDir, `cue_${String(cue.index).padStart(3, "0")}.mp3`);
-    try {
-      await renderCueMp3(cue.text, mp3path, cfg);
+    let rendered = false;
+    for (let attempt = 1; attempt <= 3 && !rendered; attempt++) {
+      try {
+        await renderCueMp3(cue.text, mp3path, cfg);
+        rendered = true;
+      } catch (e) {
+        if (attempt < 3) {
+          log.warn("tts", `cue ${cue.index} attempt ${attempt} failed (${e.message.slice(0, 60)}) — retrying in ${attempt}s`);
+          await sleep(attempt * 1000);
+        } else {
+          log.warn("tts", `cue ${cue.index} failed after 3 attempts — skipping`);
+        }
+      }
+    }
+    if (rendered) {
       const naturalSec = probeDurationSec(mp3path);
       const slotSec = (cue.end_ms - cue.start_ms) / 1000;
       cueFiles.push({
@@ -92,9 +110,9 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
         natural_sec: naturalSec,
         slot_sec: slotSec,
       });
-    } catch (e) {
-      log.warn("tts", `cue ${cue.index} failed: ${e.message} — skipping`);
     }
+    // Gentle pacing between requests to stay under Edge TTS rate limit
+    await sleep(300);
   }
 
   if (!cueFiles.length) throw new Error("tts: all cues failed");
