@@ -68,10 +68,15 @@ async function callClaude(cnSrtText, context, stricter = false) {
     // stronger reasoning than Haiku to avoid literal-character translation
     // mistakes (e.g., 爛骨頭 idiom → "xương rách" wrong, "đám lười nhác" right).
     model: "claude-sonnet-4-5-20250929",
-    max_tokens: 8192,
+    // Long videos produce big SRTs: 369 cues ≈ 15k output tokens
+    // (numbering + timestamps + VN text). 8192 truncated mid-SRT.
+    max_tokens: 32000,
     system: sys,
     messages: [{ role: "user", content: buildPrompt(cnSrtText, context) }],
   });
+  if (res.stop_reason === "max_tokens") {
+    throw new Error(`translate output truncated at max_tokens — SRT too long for single call (${cnSrtText.length} chars in)`);
+  }
   return res.content?.[0]?.text || "";
 }
 
