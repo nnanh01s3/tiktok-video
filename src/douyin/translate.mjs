@@ -63,7 +63,10 @@ async function callClaude(cnSrtText, context, stricter = false) {
   const sys = stricter
     ? SYSTEM_PROMPT + "\n\nCRITICAL: previous attempt had invalid output. You MUST preserve cue numbering and timestamps EXACTLY as input. Output VALID SRT format with blank line between cues."
     : SYSTEM_PROMPT;
-  const res = await anthropic.messages.create({
+  // Streaming required: with max_tokens 32k the SDK rejects non-streaming
+  // requests ("Streaming is strongly recommended for operations that may
+  // take longer than 10 minutes").
+  const stream = anthropic.messages.stream({
     // Upgrade Haiku → Sonnet for translation: cultivation vocabulary needs
     // stronger reasoning than Haiku to avoid literal-character translation
     // mistakes (e.g., 爛骨頭 idiom → "xương rách" wrong, "đám lười nhác" right).
@@ -74,6 +77,7 @@ async function callClaude(cnSrtText, context, stricter = false) {
     system: sys,
     messages: [{ role: "user", content: buildPrompt(cnSrtText, context) }],
   });
+  const res = await stream.finalMessage();
   if (res.stop_reason === "max_tokens") {
     throw new Error(`translate output truncated at max_tokens — SRT too long for single call (${cnSrtText.length} chars in)`);
   }
