@@ -16,6 +16,12 @@ export const DOUYIN_CONFIG = {
 
   // OCR
   ocr: {
+    // PaddleOCR PP-OCRv5 has an onednn model-loading bug on this Windows
+    // machine — every run stalls then times out (5 min wasted per video)
+    // before falling back to Gemini ASR. Disable to go straight to ASR.
+    // Re-enable if PaddleOCR gets fixed (test: npm run test:douyin + a
+    // single-frame smoke via scripts/paddle_ocr_batch.py).
+    enabled: false,
     sampleIntervalMs: 300,
     minConfidence: 0.6,
     minCues: 5,

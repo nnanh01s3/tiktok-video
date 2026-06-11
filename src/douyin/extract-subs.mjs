@@ -81,35 +81,40 @@ export async function extractSubs(mp4_path, outDir) {
   const meta_path = join(outDir, "subs_meta.json");
   const frames_dir = join(outDir, "frames");
 
-  const frames = await sampleFrames(mp4_path, frames_dir);
-  log.info("extract-subs", `sampled ${frames.length} frames`);
-
   let cues = [];
   let avgConf = 0;
   let ocrThrew = false;
   let ocrError = null;
+  const ocrEnabled = DOUYIN_CONFIG.ocr.enabled !== false;
 
-  try {
-    const ocrResults = await runOCR(frames);
-    cues = dedupOCRResults(ocrResults, {
-      intervalMs: DOUYIN_CONFIG.ocr.sampleIntervalMs,
-      jaccardThreshold: 0.85,
-      minConfidence: DOUYIN_CONFIG.ocr.minConfidence,
-    });
-    avgConf = cues.length
-      ? cues.reduce((a, c) => a + c.confidence, 0) / cues.length
-      : 0;
-    log.info("extract-subs", `OCR → ${cues.length} cues, avg_conf=${avgConf.toFixed(2)}`);
-  } catch (e) {
-    ocrThrew = true;
-    ocrError = e.message;
-    log.warn("extract-subs", `OCR crashed: ${e.message.slice(0, 200)} — will fallback to Gemini ASR`);
+  if (ocrEnabled) {
+    const frames = await sampleFrames(mp4_path, frames_dir);
+    log.info("extract-subs", `sampled ${frames.length} frames`);
+
+    try {
+      const ocrResults = await runOCR(frames);
+      cues = dedupOCRResults(ocrResults, {
+        intervalMs: DOUYIN_CONFIG.ocr.sampleIntervalMs,
+        jaccardThreshold: 0.85,
+        minConfidence: DOUYIN_CONFIG.ocr.minConfidence,
+      });
+      avgConf = cues.length
+        ? cues.reduce((a, c) => a + c.confidence, 0) / cues.length
+        : 0;
+      log.info("extract-subs", `OCR → ${cues.length} cues, avg_conf=${avgConf.toFixed(2)}`);
+    } catch (e) {
+      ocrThrew = true;
+      ocrError = e.message;
+      log.warn("extract-subs", `OCR crashed: ${e.message.slice(0, 200)} — will fallback to Gemini ASR`);
+    }
+  } else {
+    log.info("extract-subs", "OCR disabled in config — going straight to Gemini ASR");
   }
 
   let source = "ocr";
   let finalCues = cues;
 
-  const needFallback = ocrThrew ||
+  const needFallback = !ocrEnabled || ocrThrew ||
     cues.length < DOUYIN_CONFIG.ocr.minCues ||
     avgConf < DOUYIN_CONFIG.ocr.minConfidence;
 
