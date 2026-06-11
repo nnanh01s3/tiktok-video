@@ -137,51 +137,93 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
   const lastCue = cueFiles[cueFiles.length - 1];
   const baselineSec = Math.ceil(lastCue.end_ms / 1000) + Math.ceil(lastCue.natural_sec) + 2;
 
-  const inputs = ["-f", "lavfi", "-i", `anullsrc=channel_layout=stereo:sample_rate=44100:d=${baselineSec}`];
-  const filterParts = [];
-  // input 0 is the silent base; cue audio inputs start at index 1
-  cueFiles.forEach((c, i) => {
-    inputs.push("-i", c.mp3);
-    const inputIdx = i + 1; // shift past anullsrc
-    let chain = `[${inputIdx}:a]adelay=${c.start_ms}|${c.start_ms}`;
-    if (c.natural_sec > c.slot_sec && c.slot_sec > 0.5) {
-      const ratio = Math.min(1.4, c.natural_sec / c.slot_sec);
-      chain += `,atempo=${ratio.toFixed(3)}`;
+  // CHUNKED HIERARCHICAL MIXING.
+  // A single amix of 300+ inputs exceeds the Windows 32k command-line limit
+  // (the spawn fails before ffmpeg starts, with empty stderr). Instead:
+  //   1. Mix cues in chunks of ≤40 over a full-length silent base each —
+  //      absolute adelay values, so every chunk file has identical duration.
+  //   2. Mix the chunk files (a handful of inputs) into the final track.
+  const CHUNK_SIZE = 40;
+  const chunks = [];
+  for (let i = 0; i < cueFiles.length; i += CHUNK_SIZE) {
+    chunks.push(cueFiles.slice(i, i + CHUNK_SIZE));
+  }
+
+  log.info("tts", `mixing ${cueFiles.length} cues in ${chunks.length} chunk(s) → ${voiceoverPath} (baseline ${baselineSec}s)`);
+
+  function mixChunk(chunkCues, outPath, withNormalize = false) {
+    const inputs = ["-f", "lavfi", "-i", `anullsrc=channel_layout=stereo:sample_rate=44100:d=${baselineSec}`];
+    const filterParts = [];
+    chunkCues.forEach((c, i) => {
+      inputs.push("-i", c.mp3);
+      const inputIdx = i + 1; // shift past anullsrc
+      let chain = `[${inputIdx}:a]adelay=${c.start_ms}|${c.start_ms}`;
+      if (c.natural_sec > c.slot_sec && c.slot_sec > 0.5) {
+        const ratio = Math.min(1.4, c.natural_sec / c.slot_sec);
+        chain += `,atempo=${ratio.toFixed(3)}`;
+      }
+      chain += `[a${i}]`;
+      filterParts.push(chain);
+    });
+    const mixIn = `[0:a]` + chunkCues.map((_, i) => `[a${i}]`).join("");
+    let filter = `${filterParts.join(";")};${mixIn}amix=inputs=${chunkCues.length + 1}:duration=first:normalize=0[mixed]`;
+    let outputLabel = "[mixed]";
+    if (withNormalize) {
+      filter += `;[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[out]`;
+      outputLabel = "[out]";
     }
-    chain += `[a${i}]`;
-    filterParts.push(chain);
-  });
-
-  // [0:a] is the silent base; mix it with all delayed cues. duration=first
-  // anchors to the baseline so even cues delayed to minute 4+ are included.
-  const mixIn = `[0:a]` + cueFiles.map((_, i) => `[a${i}]`).join("");
-  let filter = `${filterParts.join(";")};${mixIn}amix=inputs=${cueFiles.length + 1}:duration=first:normalize=0[mixed]`;
-
-  let outputLabel = "[mixed]";
-  if (cfg.normalize) {
-    filter += `;[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[out]`;
-    outputLabel = "[out]";
+    const r = spawnSync("ffmpeg", [
+      "-y", ...inputs,
+      "-filter_complex", filter,
+      "-map", outputLabel,
+      "-c:a", "aac", "-b:a", "128k",
+      outPath,
+    ], { encoding: "utf8", timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+    if (r.status !== 0) {
+      throw new Error(`ffmpeg chunk mix failed (${chunkCues.length} cues): ${(r.stderr || r.error?.message || "empty stderr — likely cmdline too long").slice(-800)}`);
+    }
   }
 
-  log.info("tts", `mixing ${cueFiles.length} cues → ${voiceoverPath} (baseline ${baselineSec}s)`);
-  const r = spawnSync("ffmpeg", [
-    "-y",
-    ...inputs,
-    "-filter_complex", filter,
-    "-map", outputLabel,
-    "-c:a", "aac",
-    "-b:a", "128k",
-    voiceoverPath,
-  ], { encoding: "utf8", timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+  if (chunks.length === 1) {
+    // Single chunk: mix directly to final output (with loudnorm if enabled)
+    mixChunk(chunks[0], voiceoverPath, cfg.normalize);
+  } else {
+    // Mix each chunk to an intermediate, then merge intermediates
+    const chunkPaths = [];
+    chunks.forEach((chunk, ci) => {
+      const p = join(ttsDir, `chunk_${String(ci).padStart(2, "0")}.m4a`);
+      log.info("tts", `  chunk ${ci + 1}/${chunks.length} (${chunk.length} cues)`);
+      mixChunk(chunk, p, false);
+      chunkPaths.push(p);
+    });
 
-  if (r.status !== 0) {
-    throw new Error(`ffmpeg amix failed: ${(r.stderr || "").slice(-1500)}`);
+    // Final merge: chunks all share the same baseline length → amix duration=first
+    const inputs = [];
+    chunkPaths.forEach(p => inputs.push("-i", p));
+    const mixIn = chunkPaths.map((_, i) => `[${i}:a]`).join("");
+    let filter = `${mixIn}amix=inputs=${chunkPaths.length}:duration=first:normalize=0[mixed]`;
+    let outputLabel = "[mixed]";
+    if (cfg.normalize) {
+      filter += `;[mixed]loudnorm=I=-16:TP=-1.5:LRA=11[out]`;
+      outputLabel = "[out]";
+    }
+    const r = spawnSync("ffmpeg", [
+      "-y", ...inputs,
+      "-filter_complex", filter,
+      "-map", outputLabel,
+      "-c:a", "aac", "-b:a", "128k",
+      voiceoverPath,
+    ], { encoding: "utf8", timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+    if (r.status !== 0) {
+      throw new Error(`ffmpeg final merge failed: ${(r.stderr || "").slice(-800)}`);
+    }
   }
+
   if (!existsSync(voiceoverPath) || statSync(voiceoverPath).size < 10_000) {
     throw new Error(`voiceover produced suspiciously small file: ${voiceoverPath}`);
   }
 
-  // Cleanup per-cue mp3s (keep voiceover.m4a)
+  // Cleanup per-cue mp3s + chunk intermediates (keep voiceover.m4a)
   try { rmSync(ttsDir, { recursive: true, force: true }); } catch {}
 
   return { voiceover_path: voiceoverPath, cue_count: cueFiles.length };
