@@ -82,9 +82,17 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
   // small inter-cue delay + per-cue retry with backoff.
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const cueFiles = [];
+  let reused = 0;
   for (const cue of cues) {
     const mp3path = join(ttsDir, `cue_${String(cue.index).padStart(3, "0")}.mp3`);
-    let rendered = false;
+
+    // Resume support: cue mp3s from a previous run survive when the mix step
+    // failed (cleanup only runs on success). Reuse instead of re-rendering —
+    // saves ~25 min on a 369-cue re-run.
+    const fromCache = existsSync(mp3path) && statSync(mp3path).size > 1000;
+    if (fromCache) reused++;
+    let rendered = fromCache;
+
     for (let attempt = 1; attempt <= 3 && !rendered; attempt++) {
       try {
         await renderCueMp3(cue.text, mp3path, cfg);
@@ -112,11 +120,12 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
       });
     }
     // Gentle pacing between requests to stay under Edge TTS rate limit
-    await sleep(300);
+    // (skip the delay for cache hits — no network request was made)
+    if (!fromCache) await sleep(300);
   }
 
   if (!cueFiles.length) throw new Error("tts: all cues failed");
-  log.info("tts", `rendered ${cueFiles.length}/${cues.length} cues`);
+  log.info("tts", `rendered ${cueFiles.length}/${cues.length} cues${reused ? ` (${reused} reused from cache)` : ""}`);
 
   // Step 2: build ffmpeg filter_complex.
   // Strategy: use a silent base track (anullsrc) sized to the LAST cue's end_ms
