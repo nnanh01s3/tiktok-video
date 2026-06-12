@@ -113,14 +113,24 @@ export async function discover({ keyword, creator, maxResults = DOUYIN_CONFIG.ma
     await sleep(6000);
     await drainBodies();
 
-    // Scroll to trigger pagination — each scroll fires another API page.
-    for (let i = 0; i < 10; i++) {
+    // Scroll to trigger pagination — each scroll fires another API page
+    // (~10-20 items each). Scale scroll count to the requested result size
+    // so deep scans (e.g. enumerating a 190-episode series) paginate far
+    // enough. Stop early when the page stops yielding new items.
+    const maxScrolls = Math.min(60, Math.ceil(maxResults / 8) + 8);
+    let lastSize = collected.size;
+    let stale = 0;
+    for (let i = 0; i < maxScrolls; i++) {
       await cdp("Runtime.evaluate", {
         expression: "window.scrollTo(0, document.body.scrollHeight)",
       });
       await sleep(2000);
       await drainBodies();
-      if (collected.size >= maxResults * 3) break; // plenty to choose from
+      if (collected.size >= maxResults) break;
+      // No new items in 4 consecutive scrolls → reached the end
+      stale = collected.size === lastSize ? stale + 1 : 0;
+      lastSize = collected.size;
+      if (stale >= 4) break;
     }
   }, { headless: false, waitMs: 4000 });
 
