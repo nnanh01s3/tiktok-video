@@ -24,6 +24,11 @@ import "./env.js";
 import { spawn, execSync } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { startKeepAwake } from "./keep-awake.mjs";
+
+// Pin the system awake for this run — Modern Standby froze 3 overnight runs
+// despite powercfg standby-timeout=0. Keeper self-releases when we exit.
+startKeepAwake();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");

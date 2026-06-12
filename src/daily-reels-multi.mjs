@@ -28,6 +28,11 @@ import { spawn, execSync } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync, existsSync, appendFileSync, writeFileSync } from "fs";
+import { startKeepAwake } from "./keep-awake.mjs";
+
+// Pin the system awake — this pre-scheduler is the process that froze
+// overnight (23:37 11/6 mid-chiều). Keeper self-releases on exit.
+startKeepAwake();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");

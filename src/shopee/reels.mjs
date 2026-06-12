@@ -36,6 +36,11 @@ import { REELS_SOURCES, pickSource } from "./reels-config.mjs";
 import { isVideoPosted, recordPostedVideo, getRecentSourceNames } from "../db.js";
 import { classifyRelevance } from "./reels-classifier.mjs";
 import { genReelsCaption } from "./reels-caption.mjs";
+import { startKeepAwake } from "../keep-awake.mjs";
+
+// Pin system awake while this worker runs (standalone per-page retries run
+// without the daily-reels orchestrator, so the worker needs its own keeper).
+startKeepAwake();
 
 // ── CLI args ──────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
