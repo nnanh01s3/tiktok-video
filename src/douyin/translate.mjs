@@ -4,7 +4,7 @@
 import "../env.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, writeFileSync } from "node:fs";
-import { parseSRT, serializeSRT, validateSRTMatch } from "./utils/srt.mjs";
+import { parseSRT, serializeSRT } from "./utils/srt.mjs";
 import { createLogger } from "./utils/log.mjs";
 import { DOUYIN_CONFIG } from "./config.mjs";
 
@@ -50,60 +50,94 @@ OUTPUT:
 - SRT hợp lệ, chỉ tiếng Việt, không markdown, không giải thích.
 - Có dòng trống giữa các cue.`;
 
-function buildPrompt(cnSrtText, context) {
-  return `Translate the following Chinese SRT to Vietnamese.
+function buildPrompt(numberedLines, context) {
+  return `Dịch các câu thoại tiếng Trung sau sang tiếng Việt.
 
-${context ? `Additional context: ${context}\n\n` : ""}Input SRT:
-${cnSrtText}
+${context ? `Bối cảnh: ${context}\n\n` : ""}Mỗi dòng có dạng [số] nội-dung-tiếng-Trung:
+${numberedLines}
 
-Output the complete translated SRT now:`;
+YÊU CẦU OUTPUT — RẤT QUAN TRỌNG:
+- Trả về DUY NHẤT một mảng JSON, không markdown, không giải thích.
+- Mỗi phần tử: {"n": <số dòng>, "t": "<bản dịch tiếng Việt>"}
+- Phải có ĐỦ và ĐÚNG mọi số dòng từ 1 đến ${numberedLines.split("\n").length}, mỗi dòng đúng 1 phần tử. KHÔNG gộp, KHÔNG bỏ dòng nào (kể cả câu rất ngắn như "找死" → vẫn là 1 dòng riêng).
+- Chỉ dịch phần nội dung; số dòng giữ nguyên để khớp timing.
+
+Ví dụ: [{"n":1,"t":"Ban đầu..."},{"n":2,"t":"chồng lên..."}]`;
 }
 
-async function callClaude(cnSrtText, context, stricter = false) {
-  const sys = stricter
-    ? SYSTEM_PROMPT + "\n\nCRITICAL: previous attempt had invalid output. You MUST preserve cue numbering and timestamps EXACTLY as input. Output VALID SRT format with blank line between cues."
-    : SYSTEM_PROMPT;
-  // Streaming required: with max_tokens 32k the SDK rejects non-streaming
-  // requests ("Streaming is strongly recommended for operations that may
-  // take longer than 10 minutes").
+function stripJson(s) {
+  return s.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+}
+
+async function callClaude(numberedLines, context) {
+  // Streaming required: with max_tokens 32k the SDK rejects non-streaming.
   const stream = anthropic.messages.stream({
-    // Upgrade Haiku → Sonnet for translation: cultivation vocabulary needs
-    // stronger reasoning than Haiku to avoid literal-character translation
-    // mistakes (e.g., 爛骨頭 idiom → "xương rách" wrong, "đám lười nhác" right).
+    // Sonnet: cultivation vocabulary needs stronger reasoning than Haiku to
+    // avoid literal-character mistakes (爛骨頭 → "đám lười nhác", not "xương rách").
     model: "claude-sonnet-4-5-20250929",
-    // Long videos produce big SRTs: 369 cues ≈ 15k output tokens
-    // (numbering + timestamps + VN text). 8192 truncated mid-SRT.
     max_tokens: 32000,
-    system: sys,
-    messages: [{ role: "user", content: buildPrompt(cnSrtText, context) }],
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: buildPrompt(numberedLines, context) }],
   });
   const res = await stream.finalMessage();
   if (res.stop_reason === "max_tokens") {
-    throw new Error(`translate output truncated at max_tokens — SRT too long for single call (${cnSrtText.length} chars in)`);
+    throw new Error(`translate truncated at max_tokens (input too long)`);
   }
   return res.content?.[0]?.text || "";
 }
 
+/**
+ * Index-based translation: send numbered Chinese lines, get back a JSON array
+ * of {n, t}, then rebuild the VN SRT using the SOURCE timing keyed by index.
+ *
+ * Why: the old approach asked Claude to reproduce the whole SRT (numbers +
+ * timestamps + text), and Claude occasionally merged two short adjacent cues,
+ * dropping the count by 1 and failing strict validation. Decoupling timing
+ * (always from source) from translation (text-by-index) makes timing perfect
+ * and tolerant of minor index gaps (filled with the original text).
+ */
 export async function translateSRT(cn_srt_path, vn_srt_path, { context = "" } = {}) {
-  const cnText = readFileSync(cn_srt_path, "utf8");
-  const cnCues = parseSRT(cnText);
+  const cnCues = parseSRT(readFileSync(cn_srt_path, "utf8"));
   if (!cnCues.length) throw new Error("translate: no cues in source SRT");
+
+  const numbered = cnCues.map((c, i) => `[${i + 1}] ${c.text}`).join("\n");
 
   let lastErr;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      log.info("translate", `Claude attempt ${attempt}/2 (${cnCues.length} cues)`);
-      const vnText = await callClaude(cnText, context, attempt > 1);
-      const vnCues = parseSRT(vnText);
-      const { ok, errors } = validateSRTMatch(cnCues, vnCues, 50);
-      if (!ok) {
-        throw new Error(`SRT mismatch: ${errors.join("; ")}`);
+      log.info("translate", `Claude attempt ${attempt}/2 (${cnCues.length} cues, index-based)`);
+      const raw = await callClaude(numbered, context);
+
+      let arr;
+      try { arr = JSON.parse(stripJson(raw)); }
+      catch { throw new Error(`non-JSON output: ${raw.slice(0, 120)}`); }
+      if (!Array.isArray(arr)) throw new Error("output not a JSON array");
+
+      // Map index → VN text
+      const byN = new Map();
+      for (const item of arr) {
+        const n = parseInt(item?.n, 10);
+        if (n >= 1 && n <= cnCues.length && typeof item.t === "string") byN.set(n, item.t.trim());
       }
+
+      // Require most cues present; fill small gaps with the original CN text
+      // rather than failing the whole segment.
+      const missing = [];
+      const vnCues = cnCues.map((c, i) => {
+        const n = i + 1;
+        const t = byN.get(n);
+        if (t == null || t === "") { missing.push(n); return { ...c, text: c.text }; }
+        return { ...c, text: t };
+      });
+      if (missing.length > cnCues.length * 0.15) {
+        throw new Error(`too many untranslated cues: ${missing.length}/${cnCues.length}`);
+      }
+      if (missing.length) log.warn("translate", `${missing.length} cue(s) left as source (gaps: ${missing.slice(0, 8).join(",")})`);
+
       const ratios = vnCues.map((v, i) => v.text.length / Math.max(1, cnCues[i].text.length));
       const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
-      if (avg > 1.8) {
-        log.warn("translate", `VN/CN char_ratio=${avg.toFixed(2)} > 1.8 — sub may overflow`);
-      }
+      if (avg > 1.8) log.warn("translate", `VN/CN char_ratio=${avg.toFixed(2)} > 1.8 — sub may overflow`);
+
       writeFileSync(vn_srt_path, serializeSRT(vnCues));
       return { vn_srt_path, cue_count: vnCues.length, char_ratio: avg };
     } catch (e) {
