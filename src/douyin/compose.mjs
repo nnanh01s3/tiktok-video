@@ -219,7 +219,13 @@ export async function compose({ mp4_path, vn_srt_path, output_path, voiceover_pa
     // Video from original (input 0), audio from voiceover (input 1)
     args.push("-map", "0:v:0", "-map", "1:a:0",
               "-c:a", "aac", "-b:a", "128k", "-shortest");
+  } else if (doTrim) {
+    // Keep original audio but RE-ENCODE when trimming: -c copy with an input
+    // -ss can land on a non-zero first-packet PTS and drift A/V sync. Re-encode
+    // to AAC so the trimmed audio starts cleanly at 0 aligned with the video.
+    args.push("-map", "0:v:0", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "192k");
   } else {
+    // No trim: stream-copy original audio losslessly
     args.push("-map", "0:v:0", "-map", "0:a:0?", "-c:a", "copy");
   }
   args.push("-pix_fmt", "yuv420p");

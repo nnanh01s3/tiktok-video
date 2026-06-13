@@ -18,15 +18,22 @@ export const DOUYIN_CONFIG = {
   ocr: {
     // PaddleOCR PP-OCRv5 has an onednn model-loading bug on this Windows
     // machine — every run stalls then times out (5 min wasted per video)
-    // before falling back to Gemini ASR. Disable to go straight to ASR.
-    // Re-enable if PaddleOCR gets fixed (test: npm run test:douyin + a
-    // single-frame smoke via scripts/paddle_ocr_batch.py).
+    // before falling back to ASR. Disabled; Whisper is now the primary path.
     enabled: false,
     sampleIntervalMs: 300,
     minConfidence: 0.6,
     minCues: 5,
     cropBottomRatio: 0.4,
     cropOffsetRatio: 0.55,
+  },
+
+  // Subtitle transcription: faster-whisper (forced-aligned timestamps) is the
+  // primary source so subtitles match when each line is actually spoken.
+  // Gemini multimodal ASR is the fallback (good transcription, estimated timing).
+  whisper: {
+    enabled: true,
+    lang: "zh",
+    model: "large-v3",   // CPU int8 ~0.4x realtime; drop to "medium" if too slow
   },
 
   // Subtitle style.
@@ -66,7 +73,13 @@ export const DOUYIN_CONFIG = {
 
   // TTS (Vietnamese voice-over narration)
   tts: {
-    enabled: true,
+    // OFF for anime episodes: these have continuous original audio (BGM + SFX
+    // + voice acting) and dialogue that's rapid + expands ~3.8x in Vietnamese,
+    // so cue-by-cue TTS overruns its time slots and overlaps, AND replacing the
+    // original audio loses the music/effects that make the clip worth watching.
+    // Subtitle-only + original audio is the correct treatment (standard fansub
+    // model). Turn back on only for recap/解说 content with a single narrator.
+    enabled: false,
     // MS Edge TTS voice. Vietnamese options:
     //   vi-VN-NamMinhNeural (male, mid-age, calm) — best for cultivation/cổ trang
     //   vi-VN-HoaiMyNeural  (female, young)

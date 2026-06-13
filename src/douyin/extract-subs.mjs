@@ -81,48 +81,33 @@ export async function extractSubs(mp4_path, outDir) {
   const meta_path = join(outDir, "subs_meta.json");
   const frames_dir = join(outDir, "frames");
 
-  let cues = [];
-  let avgConf = 0;
-  let ocrThrew = false;
-  let ocrError = null;
-  const ocrEnabled = DOUYIN_CONFIG.ocr.enabled !== false;
+  let finalCues = null;
+  let source = null;
 
-  if (ocrEnabled) {
-    const frames = await sampleFrames(mp4_path, frames_dir);
-    log.info("extract-subs", `sampled ${frames.length} frames`);
-
+  // PRIMARY: faster-whisper — forced-aligned timestamps so subtitles match
+  // when each line is actually spoken (Gemini ASR timestamps are estimates
+  // and drift, which desyncs subs from the video).
+  if (DOUYIN_CONFIG.whisper?.enabled !== false) {
     try {
-      const ocrResults = await runOCR(frames);
-      cues = dedupOCRResults(ocrResults, {
-        intervalMs: DOUYIN_CONFIG.ocr.sampleIntervalMs,
-        jaccardThreshold: 0.85,
-        minConfidence: DOUYIN_CONFIG.ocr.minConfidence,
+      const { whisperTranscribe } = await import("./whisper-asr.mjs");
+      const cues = await whisperTranscribe(mp4_path, {
+        lang: DOUYIN_CONFIG.whisper?.lang || "zh",
+        model: DOUYIN_CONFIG.whisper?.model || "large-v3",
       });
-      avgConf = cues.length
-        ? cues.reduce((a, c) => a + c.confidence, 0) / cues.length
-        : 0;
-      log.info("extract-subs", `OCR → ${cues.length} cues, avg_conf=${avgConf.toFixed(2)}`);
+      if (cues.length >= 3) {
+        finalCues = cues;
+        source = "whisper";
+      }
     } catch (e) {
-      ocrThrew = true;
-      ocrError = e.message;
-      log.warn("extract-subs", `OCR crashed: ${e.message.slice(0, 200)} — will fallback to Gemini ASR`);
+      log.warn("extract-subs", `whisper failed: ${e.message.slice(0, 160)} — falling back to Gemini ASR`);
     }
-  } else {
-    log.info("extract-subs", "OCR disabled in config — going straight to Gemini ASR");
   }
 
-  let source = "ocr";
-  let finalCues = cues;
-
-  const needFallback = !ocrEnabled || ocrThrew ||
-    cues.length < DOUYIN_CONFIG.ocr.minCues ||
-    avgConf < DOUYIN_CONFIG.ocr.minConfidence;
-
-  if (needFallback) {
-    log.warn("extract-subs", `→ Gemini ASR fallback (reason: ${ocrThrew ? "ocr crash" : "below threshold"})`);
+  // FALLBACK: Gemini multimodal ASR (transcription good, timing estimated)
+  if (!finalCues) {
+    log.warn("extract-subs", "→ Gemini ASR fallback");
     const { asrFallback } = await import("./fallback-asr.mjs");
-    const asrCues = await asrFallback(mp4_path);
-    finalCues = asrCues;
+    finalCues = await asrFallback(mp4_path);
     source = "asr";
   }
 
@@ -130,13 +115,12 @@ export async function extractSubs(mp4_path, outDir) {
   writeFileSync(meta_path, JSON.stringify({
     source,
     cue_count: finalCues.length,
-    avg_confidence: avgConf,
     generated_at: new Date().toISOString(),
   }, null, 2));
 
   try { rmSync(frames_dir, { recursive: true, force: true }); } catch {}
 
-  return { srt_path, source, cue_count: finalCues.length, avg_confidence: avgConf };
+  return { srt_path, source, cue_count: finalCues.length };
 }
 
 // CLI smoke
