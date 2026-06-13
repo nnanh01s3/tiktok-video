@@ -54,6 +54,34 @@ export const DOUYIN_CONFIG = {
     alignment: 2,
   },
 
+  // Recap mode (解说/thuyết minh style — like VN anime-recap channels):
+  // continuous VN narration + caption box + ducked original BGM, 16:9 output.
+  recap: {
+    width: 1280,
+    height: 720,
+    crf: 23,
+    preset: "ultrafast",
+    bgmVolume: 0.15,          // duck original audio to 15% under the narration
+    // Caption style (ASS): opaque box behind text (BorderStyle=4), bottom-center.
+    caption: {
+      fontName: "Be Vietnam Pro",
+      fontSize: 34,           // relative to 1280x720
+      primaryColour: "&H00FFFFFF",   // white text
+      backColour: "&H99000000",      // ~60% opaque black box
+      outlineColour: "&H00000000",
+      borderStyle: 4,         // 4 = opaque box (vs 1 = outline+shadow)
+      outline: 0,
+      shadow: 0,
+      marginV: 60,
+      alignment: 2,           // bottom-center
+    },
+    // Optional channel logo overlay (PNG with transparency). null = skip.
+    logoPath: null,
+    logoX: 20,                // top-left position
+    logoY: 20,
+    logoWidthPx: 180,
+  },
+
   // Compose
   output: {
     width: 1080,

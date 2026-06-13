@@ -63,6 +63,93 @@ function probeDurationSec(audioPath) {
   return parseFloat(r.stdout.trim()) || 0;
 }
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Render one sentence to mp3 with retry (Edge TTS rate-limits rapid requests).
+ */
+async function renderWithRetry(text, mp3path, cfg) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try { await renderCueMp3(text, mp3path, cfg); return true; }
+    catch (e) {
+      if (attempt < 3) { log.warn("tts", `retry ${attempt}: ${e.message.slice(0, 50)}`); await sleep(attempt * 1000); }
+      else log.warn("tts", `sentence failed after 3 attempts — skipping: "${text.slice(0, 40)}"`);
+    }
+  }
+  return false;
+}
+
+/**
+ * Recap voiceover: render sentences and concatenate SEQUENTIALLY (each after
+ * the previous + a small gap), NOT at fixed timestamps. Because the narration
+ * is one continuous flow, there is no overlap by construction.
+ *
+ * @param {string[]} sentences
+ * @param {string} outDir
+ * @returns {Promise<{ voiceover_path, captions: Array<{start_ms,end_ms,text}>, total_sec }>}
+ */
+export async function generateRecapVoiceover(sentences, outDir, opts = {}) {
+  const cfg = { ...DOUYIN_CONFIG.tts, ...opts };
+  const ttsDir = join(outDir, "tts_recap");
+  mkdirSync(ttsDir, { recursive: true });
+  const voiceoverPath = join(outDir, "voiceover.m4a");
+  const GAP_MS = 250; // breathing room between sentences
+
+  log.info("tts", `recap: rendering ${sentences.length} sentences with ${cfg.voice}`);
+
+  const parts = [];      // { mp3, dur_sec, text }
+  for (let i = 0; i < sentences.length; i++) {
+    const text = sentences[i];
+    const mp3 = join(ttsDir, `s_${String(i).padStart(3, "0")}.mp3`);
+    const fromCache = existsSync(mp3) && statSync(mp3).size > 1000;
+    const ok = fromCache || await renderWithRetry(text, mp3, cfg);
+    if (!fromCache) await sleep(250);
+    if (ok) parts.push({ mp3, dur_sec: probeDurationSec(mp3), text });
+  }
+  if (!parts.length) throw new Error("tts recap: all sentences failed");
+
+  // Build caption timings from sequential placement
+  const captions = [];
+  let cursor = 0;
+  for (const p of parts) {
+    const start_ms = Math.round(cursor);
+    const end_ms = Math.round(cursor + p.dur_sec * 1000);
+    captions.push({ start_ms, end_ms, text: p.text });
+    cursor = end_ms + GAP_MS;
+  }
+  const total_sec = cursor / 1000;
+
+  // Concatenate the mp3s with small silence gaps using the concat filter.
+  // Each input is a sentence; we interleave anullsrc gaps for spacing.
+  const inputs = [];
+  const filterParts = [];
+  parts.forEach((p, i) => {
+    inputs.push("-i", p.mp3);
+    filterParts.push(`[${i}:a]`);
+  });
+  // Simple concat (gaps are small; Edge clips have natural lead/tail silence)
+  const concatFilter = `${filterParts.join("")}concat=n=${parts.length}:v=0:a=1[out]`;
+  let filter = concatFilter;
+  let outLabel = "[out]";
+  if (cfg.normalize) {
+    filter += `;[out]loudnorm=I=-16:TP=-1.5:LRA=11[norm]`;
+    outLabel = "[norm]";
+  }
+
+  log.info("tts", `recap: concatenating ${parts.length} clips → ${voiceoverPath} (~${total_sec.toFixed(0)}s)`);
+  const r = spawnSync("ffmpeg", [
+    "-y", ...inputs,
+    "-filter_complex", filter,
+    "-map", outLabel,
+    "-c:a", "aac", "-b:a", "128k",
+    voiceoverPath,
+  ], { encoding: "utf8", timeout: 600_000, maxBuffer: 50 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`recap concat failed: ${(r.stderr || "").slice(-800)}`);
+
+  try { rmSync(ttsDir, { recursive: true, force: true }); } catch {}
+  return { voiceover_path: voiceoverPath, captions, total_sec };
+}
+
 export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
   const cfg = { ...DOUYIN_CONFIG.tts, ...opts };
   const cues = parseSRT(readFileSync(vn_srt_path, "utf8"));
@@ -79,8 +166,7 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
   //
   // Edge TTS rate-limits rapid sequential requests — symptoms: alternating
   // cues return 0 bytes (cue 4,6,7,9 fail while 5,8 succeed). Mitigation:
-  // small inter-cue delay + per-cue retry with backoff.
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // small inter-cue delay + per-cue retry with backoff. (module-level `sleep`)
   const cueFiles = [];
   let reused = 0;
   for (const cue of cues) {

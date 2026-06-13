@@ -244,6 +244,92 @@ export async function compose({ mp4_path, vn_srt_path, output_path, voiceover_pa
   return output_path;
 }
 
+/**
+ * Build a recap-style ASS: opaque caption box, bottom-center, sized to the
+ * recap output resolution (PlayRes = recap.width x recap.height).
+ */
+function writeRecapAss({ srt_path, ass_path }) {
+  const r = DOUYIN_CONFIG.recap;
+  const c = r.caption;
+  const cues = parseSRT(readFileSync(srt_path, "utf8"));
+  const header =
+`[Script Info]
+ScriptType: v4.00+
+PlayResX: ${r.width}
+PlayResY: ${r.height}
+ScaledBorderAndShadow: yes
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,${c.fontName},${c.fontSize},${c.primaryColour},${c.primaryColour},${c.outlineColour},${c.backColour},0,0,0,0,100,100,0,0,${c.borderStyle},${c.outline},${c.shadow},${c.alignment},60,60,${c.marginV},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+  const events = cues.map(cu => {
+    const text = (cu.text || "").replace(/\r?\n/g, "\\N").replace(/\{/g, "(").replace(/\}/g, ")");
+    return `Dialogue: 0,${msToAssTs(cu.start_ms)},${msToAssTs(cu.end_ms)},Default,,0,0,0,,${text}`;
+  });
+  writeFileSync(ass_path, header + events.join("\n") + "\n");
+  return ass_path;
+}
+
+/**
+ * Recap compose: 16:9, caption box, original audio ducked under VN narration.
+ *
+ * @param {object} o
+ * @param {string} o.mp4_path
+ * @param {string} o.caption_srt_path  VN caption SRT (timed to the voiceover)
+ * @param {string} o.voiceover_path    VN narration audio (starts at 0)
+ * @param {string} o.output_path
+ */
+export async function composeRecap({ mp4_path, caption_srt_path, voiceover_path, output_path }) {
+  if (!existsSync(mp4_path)) throw new Error(`mp4 not found: ${mp4_path}`);
+  if (!existsSync(caption_srt_path)) throw new Error(`caption SRT not found: ${caption_srt_path}`);
+  if (!existsSync(voiceover_path)) throw new Error(`voiceover not found: ${voiceover_path}`);
+
+  const r = DOUYIN_CONFIG.recap;
+  const mp4Abs = resolve(mp4_path);
+  const outAbs = resolve(output_path);
+  const cwd = dirname(resolve(caption_srt_path));
+
+  const assPath = join(cwd, "caption_recap.ass");
+  writeRecapAss({ srt_path: resolve(caption_srt_path), ass_path: assPath });
+  const assName = basename(assPath);
+
+  // Video: scale to 16:9 box, pad if source aspect differs (keeps full frame).
+  const vf = [
+    `scale=${r.width}:${r.height}:force_original_aspect_ratio=decrease`,
+    `pad=${r.width}:${r.height}:(ow-iw)/2:(oh-ih)/2:color=black`,
+    `ass=${assName}`,
+  ].join(",");
+
+  // Audio: duck original to bgmVolume, mix VN voiceover on top. duration=first
+  // makes the ducked original (full video length) the master, so the output
+  // runs the whole video even after narration ends.
+  const af = `[0:a]volume=${r.bgmVolume}[bg];[bg][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
+
+  log.info("compose", `recap → ${output_path} (16:9, BGM ducked to ${r.bgmVolume}, + VN narration)`);
+  const args = [
+    "-y",
+    "-i", mp4Abs,
+    "-i", resolve(voiceover_path),
+    "-filter_complex", af,
+    "-vf", vf,
+    "-map", "0:v:0", "-map", "[aout]",
+    "-c:v", "libx264", "-crf", String(r.crf), "-preset", r.preset, "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-b:a", "160k",
+    outAbs,
+  ];
+  const res = spawnSync("ffmpeg", args, { encoding: "utf8", timeout: 1200_000, cwd, maxBuffer: 50 * 1024 * 1024 });
+  if (res.status !== 0) throw new Error(`recap compose failed: ${(res.stderr || "").slice(-1500)}`);
+  if (!existsSync(output_path) || statSync(output_path).size < 10_000) {
+    throw new Error(`recap compose produced tiny file: ${output_path}`);
+  }
+  return output_path;
+}
+
 // CLI smoke
 const { isMainModule: __isMain } = await import("./utils/is-cli.mjs");
 if (__isMain(import.meta.url)) {
