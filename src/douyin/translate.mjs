@@ -50,7 +50,10 @@ OUTPUT:
 - SRT hợp lệ, chỉ tiếng Việt, không markdown, không giải thích.
 - Có dòng trống giữa các cue.`;
 
-function buildPrompt(numberedLines, context) {
+function buildPrompt(numberedLines, context, concise) {
+  const conciseRule = concise
+    ? `\n- ⚠ DỊCH THẬT NGẮN GỌN: đây là LỒNG TIẾNG, mỗi câu phải đọc vừa đúng khoảng thời gian nhân vật nói. Dùng ÍT từ nhất có thể mà vẫn đủ ý. Bỏ từ thừa, không thêm chữ. Ưu tiên câu ngắn hơn bản gốc.`
+    : "";
   return `Dịch các câu thoại tiếng Trung sau sang tiếng Việt.
 
 ${context ? `Bối cảnh: ${context}\n\n` : ""}Mỗi dòng có dạng [số] nội-dung-tiếng-Trung:
@@ -60,7 +63,7 @@ YÊU CẦU OUTPUT — RẤT QUAN TRỌNG:
 - Trả về DUY NHẤT một mảng JSON, không markdown, không giải thích.
 - Mỗi phần tử: {"n": <số dòng>, "t": "<bản dịch tiếng Việt>"}
 - Phải có ĐỦ và ĐÚNG mọi số dòng từ 1 đến ${numberedLines.split("\n").length}, mỗi dòng đúng 1 phần tử. KHÔNG gộp, KHÔNG bỏ dòng nào (kể cả câu rất ngắn như "找死" → vẫn là 1 dòng riêng).
-- Chỉ dịch phần nội dung; số dòng giữ nguyên để khớp timing.
+- Chỉ dịch phần nội dung; số dòng giữ nguyên để khớp timing.${conciseRule}
 
 Ví dụ: [{"n":1,"t":"Ban đầu..."},{"n":2,"t":"chồng lên..."}]`;
 }
@@ -69,7 +72,7 @@ function stripJson(s) {
   return s.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
-async function callClaude(numberedLines, context) {
+async function callClaude(numberedLines, context, concise) {
   // Streaming required: with max_tokens 32k the SDK rejects non-streaming.
   const stream = anthropic.messages.stream({
     // Sonnet: cultivation vocabulary needs stronger reasoning than Haiku to
@@ -77,7 +80,7 @@ async function callClaude(numberedLines, context) {
     model: "claude-sonnet-4-5-20250929",
     max_tokens: 32000,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: buildPrompt(numberedLines, context) }],
+    messages: [{ role: "user", content: buildPrompt(numberedLines, context, concise) }],
   });
   const res = await stream.finalMessage();
   if (res.stop_reason === "max_tokens") {
@@ -96,7 +99,7 @@ async function callClaude(numberedLines, context) {
  * (always from source) from translation (text-by-index) makes timing perfect
  * and tolerant of minor index gaps (filled with the original text).
  */
-export async function translateSRT(cn_srt_path, vn_srt_path, { context = "" } = {}) {
+export async function translateSRT(cn_srt_path, vn_srt_path, { context = "", concise = false } = {}) {
   const cnCues = parseSRT(readFileSync(cn_srt_path, "utf8"));
   if (!cnCues.length) throw new Error("translate: no cues in source SRT");
 
@@ -106,7 +109,7 @@ export async function translateSRT(cn_srt_path, vn_srt_path, { context = "" } = 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       log.info("translate", `Claude attempt ${attempt}/2 (${cnCues.length} cues, index-based)`);
-      const raw = await callClaude(numbered, context);
+      const raw = await callClaude(numbered, context, concise);
 
       let arr;
       try { arr = JSON.parse(stripJson(raw)); }

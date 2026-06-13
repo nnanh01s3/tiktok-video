@@ -194,7 +194,6 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
     }
     if (rendered) {
       const naturalSec = probeDurationSec(mp3path);
-      const slotSec = (cue.end_ms - cue.start_ms) / 1000;
       cueFiles.push({
         index: cue.index,
         text: cue.text,
@@ -202,7 +201,7 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
         start_ms: cue.start_ms,
         end_ms: cue.end_ms,
         natural_sec: naturalSec,
-        slot_sec: slotSec,
+        slot_sec: 0, // filled below using gap-to-next-cue
       });
     }
     // Gentle pacing between requests to stay under Edge TTS rate limit
@@ -212,6 +211,17 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
 
   if (!cueFiles.length) throw new Error("tts: all cues failed");
   log.info("tts", `rendered ${cueFiles.length}/${cues.length} cues${reused ? ` (${reused} reused from cache)` : ""}`);
+
+  // Compute each cue's slot as the GAP TO THE NEXT cue's start — this is the
+  // window the clip must fit in to avoid overlapping the next spoken line.
+  // (Using the cue's own duration wasn't enough: dialogue cues are short but
+  // the gap to the next line is what actually bounds overlap.)
+  for (let i = 0; i < cueFiles.length; i++) {
+    const next = cueFiles[i + 1];
+    const gapMs = next ? (next.start_ms - cueFiles[i].start_ms)
+                       : (cueFiles[i].end_ms - cueFiles[i].start_ms);
+    cueFiles[i].slot_sec = Math.max(0.4, gapMs / 1000);
+  }
 
   // Step 2: build ffmpeg filter_complex.
   // Strategy: use a silent base track (anullsrc) sized to the LAST cue's end_ms
@@ -253,8 +263,12 @@ export async function generateVoiceover(vn_srt_path, outDir, opts = {}) {
       inputs.push("-i", c.mp3);
       const inputIdx = i + 1; // shift past anullsrc
       let chain = `[${inputIdx}:a]adelay=${c.start_ms}|${c.start_ms}`;
-      if (c.natural_sec > c.slot_sec && c.slot_sec > 0.5) {
-        const ratio = Math.min(1.4, c.natural_sec / c.slot_sec);
+      // Speed up (max 1.7×) so a clip fits the gap to the next spoken line.
+      // 1.7× is still intelligible; with concise translation most clips need
+      // little or none. Beyond 1.7× we accept a tiny overrun (next clip's
+      // anchor truncates it) rather than chipmunk-speed audio.
+      if (c.natural_sec > c.slot_sec && c.slot_sec > 0.4) {
+        const ratio = Math.min(1.7, c.natural_sec / c.slot_sec);
         chain += `,atempo=${ratio.toFixed(3)}`;
       }
       chain += `[a${i}]`;
