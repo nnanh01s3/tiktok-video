@@ -157,7 +157,17 @@ function buildVideoFilter(sourceW, sourceH) {
   return { vf, marginV };
 }
 
-export async function compose({ mp4_path, vn_srt_path, output_path, voiceover_path = null }) {
+/**
+ * @param {object} o
+ * @param {string} o.mp4_path        source video
+ * @param {string} o.vn_srt_path     VN subtitle (timed relative to the OUTPUT,
+ *                                   i.e. starting at 0 — caller rebases for trims)
+ * @param {string} o.output_path
+ * @param {string|null} [o.voiceover_path]
+ * @param {number|null} [o.trimStartSec]  if set, take only [trimStartSec, +trimDurSec)
+ * @param {number|null} [o.trimDurSec]
+ */
+export async function compose({ mp4_path, vn_srt_path, output_path, voiceover_path = null, trimStartSec = null, trimDurSec = null }) {
   if (!existsSync(mp4_path)) throw new Error(`mp4 not found: ${mp4_path}`);
   if (!existsSync(vn_srt_path)) throw new Error(`SRT not found: ${vn_srt_path}`);
   if (voiceover_path && !existsSync(voiceover_path)) {
@@ -193,8 +203,15 @@ export async function compose({ mp4_path, vn_srt_path, output_path, voiceover_pa
     log.info("compose", `audio: keep original CN`);
   }
 
-  const args = ["-y", "-i", mp4Abs];
+  const args = ["-y"];
+  // Trim: -ss before -i = fast seek to nearest keyframe ≤ start, then re-encode
+  // (libx264 below) makes the cut frame-accurate. -t limits the duration.
+  // The VN SRT/voiceover must already be rebased to segment-local time by the caller.
+  const doTrim = trimStartSec != null && trimDurSec != null;
+  if (doTrim) args.push("-ss", String(trimStartSec));
+  args.push("-i", mp4Abs);
   if (voiceover_path) args.push("-i", resolve(voiceover_path));
+  if (doTrim) args.push("-t", String(trimDurSec));
   args.push("-vf", vf);
   args.push("-c:v", "libx264", "-crf", String(output.crf), "-preset", output.preset);
   args.push("-r", String(output.fps));
