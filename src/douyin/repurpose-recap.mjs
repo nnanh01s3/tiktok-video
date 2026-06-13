@@ -83,7 +83,7 @@ async function main() {
   const { sentences } = await generateRecap(subs_cn, durationSec);
 
   // 4. TTS sequentially → voiceover + caption timings
-  const { captions } = await generateRecapVoiceover(sentences, dir);
+  const { captions, total_sec } = await generateRecapVoiceover(sentences, dir);
 
   // 5. Write caption SRT from voiceover timing
   const captionCues = captions.map((c, i) => ({
@@ -91,12 +91,19 @@ async function main() {
   }));
   writeFileSync(caption_srt, serializeSRT(captionCues));
 
-  // 6. Compose recap-style
+  // 6. Compose recap-style. If the narration is much shorter than the video
+  // (action-heavy episode → short recap), trim output to the narration length
+  // so there's no silent tail. If they're close, keep the full video.
+  const trimToNarration = total_sec < durationSec * 0.85 ? total_sec + 1.5 : null;
+  if (trimToNarration) {
+    log.info("recap-pipe", `narration ${total_sec.toFixed(0)}s << video ${durationSec}s → trimming output to narration`);
+  }
   await composeRecap({
     mp4_path: original_mp4,
     caption_srt_path: caption_srt,
     voiceover_path: voiceover,
     output_path: composed,
+    maxDurSec: trimToNarration,
   });
 
   state.upsert(modal_id, { status: "recap_done", recap_sentences: sentences.length });

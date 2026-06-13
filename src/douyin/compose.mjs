@@ -284,7 +284,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
  * @param {string} o.voiceover_path    VN narration audio (starts at 0)
  * @param {string} o.output_path
  */
-export async function composeRecap({ mp4_path, caption_srt_path, voiceover_path, output_path }) {
+export async function composeRecap({ mp4_path, caption_srt_path, voiceover_path, output_path, maxDurSec = null }) {
   if (!existsSync(mp4_path)) throw new Error(`mp4 not found: ${mp4_path}`);
   if (!existsSync(caption_srt_path)) throw new Error(`caption SRT not found: ${caption_srt_path}`);
   if (!existsSync(voiceover_path)) throw new Error(`voiceover not found: ${voiceover_path}`);
@@ -310,7 +310,7 @@ export async function composeRecap({ mp4_path, caption_srt_path, voiceover_path,
   // runs the whole video even after narration ends.
   const af = `[0:a]volume=${r.bgmVolume}[bg];[bg][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
 
-  log.info("compose", `recap → ${output_path} (16:9, BGM ducked to ${r.bgmVolume}, + VN narration)`);
+  log.info("compose", `recap → ${output_path} (16:9, BGM ducked to ${r.bgmVolume}, + VN narration${maxDurSec ? `, trimmed to ${Math.round(maxDurSec)}s` : ""})`);
   const args = [
     "-y",
     "-i", mp4Abs,
@@ -320,8 +320,11 @@ export async function composeRecap({ mp4_path, caption_srt_path, voiceover_path,
     "-map", "0:v:0", "-map", "[aout]",
     "-c:v", "libx264", "-crf", String(r.crf), "-preset", r.preset, "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-b:a", "160k",
-    outAbs,
   ];
+  // Trim output to the narration length so a short recap of a long episode
+  // doesn't leave minutes of silent footage at the end.
+  if (maxDurSec) args.push("-t", String(Math.ceil(maxDurSec)));
+  args.push(outAbs);
   const res = spawnSync("ffmpeg", args, { encoding: "utf8", timeout: 1200_000, cwd, maxBuffer: 50 * 1024 * 1024 });
   if (res.status !== 0) throw new Error(`recap compose failed: ${(res.stderr || "").slice(-1500)}`);
   if (!existsSync(output_path) || statSync(output_path).size < 10_000) {
