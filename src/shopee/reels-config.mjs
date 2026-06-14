@@ -49,6 +49,9 @@ export const REELS_SOURCES = {
     { name: "Mê Đồ Gia Dụng Tiện Ích", platform: "tiktok", url: "https://www.tiktok.com/@medogiadungtienich6" }, // daily, gadget/tiện ích review (also in gia_dung), 9 MB raw
     // ── ADDED 2026-05-22: long-format đồ-độc-lạ roundup (verified 12MB+ raw) ──
     { name: "Hằng Đi Buôn 2",          platform: "tiktok", url: "https://www.tiktok.com/@hangdibuon.2" },        // roundup reviews đồ độc lạ nội địa TQ, 50-111s videos, verified 12 MB raw
+    // ── ADDED 2026-06-14: source expansion for 5-slot cadence (niche sparse — only 2 confirmed). ──
+    { name: "Idea Shop VN",            platform: "tiktok", url: "https://www.tiktok.com/@ideashopvn" },           // EDC/fidget/novelty gadgets, 180-314s very long → always clears 2MB, active 2026-06
+    { name: "Gia Dụng Tiện Ích TM",    platform: "tiktok", url: "https://www.tiktok.com/@giadungtienichthongminh3" }, // gadget tiện ích demos, MULTIPLE posts/day (high inventory), 42-57s, original-sound
   ],
 
   // ── gia_dung (Đồ Gia Dụng) — kitchen, smart home, appliances ──
@@ -76,6 +79,10 @@ export const REELS_SOURCES = {
     // ── ADDED 2026-05-31: long-format "thử nghiệm/review có thật sự" archetype (verified 7/8 vids ≥40s, 1080p 14-18MB raw). ──
     // Mixed topics (~50% gia_dung, ~50% beauty/toy) but on-topic clips are 2-3min → reliably >2MB after FFmpeg. The "đủ dài để qua bitrate filter" win gia_dung lacked.
     { name: "Bếp Nhà Thỏ Phương Chi",  platform: "tiktok",   url: "https://www.tiktok.com/@bepnhathophuongchi" },     // 99-229s long-format product reviews, 1080p ~14-18MB raw, active 2026-05
+    // ── ADDED 2026-06-14: more "thử nghiệm/test/đập hộp" personality channels for 5-slot cadence. ──
+    { name: "Kiên Review",             platform: "tiktok",   url: "https://www.tiktok.com/@kienthanhle90" },          // "thánh review" test/đập hộp, daily, 36-111s, gadgets+small appliances+smart home
+    { name: "Hạnh Chia Sẻ",            platform: "tiktok",   url: "https://www.tiktok.com/@hanhchiase.xaykenh" },     // self-test reviews, daily, 43-77s, 6/6 âm thanh gốc, máy làm đá/quạt/ổ cắm/đèn
+    { name: "Trung Quốc Có Gì Hot",    platform: "tiktok",   url: "https://www.tiktok.com/@trungquoccogihot12021988" }, // kitchen/cleaning gadget "có thật sự tốt?" tests, 47-76s, most on-topic kitchen
   ],
 
   // ── tech (Đồ Công Nghệ) — gadgets, phone, reviews ──
@@ -123,6 +130,14 @@ export const REELS_SOURCES = {
     { name: "Tom Skincare",      platform: "tiktok",   url: "https://www.tiktok.com/@tomskincare" },        // daily, minimalist skincare routines/reviews, 8.4 MB raw
     { name: "Hoàng Minh Ngọc",  platform: "tiktok",   url: "https://www.tiktok.com/@hoangminhngoc21" },    // daily, Gen Z beauty (makeup, mỹ phẩm), ~1.1M, 6.2 MB raw
     { name: "HTX Beauty",        platform: "tiktok",   url: "https://www.tiktok.com/@htxbeauty.lc" },       // daily, beauty-blogger collective (makeup/skincare/son), 12.9 MB raw
+    // ── ADDED 2026-06-14: source expansion post-HannahOlala removal + 5-slot cadence. All verified
+    // 6/6 (top 4) "âm thanh gốc" narrated reviews → FB-mute safe, long-format 80-470s → clears bitrate. ──
+    { name: "Skincare Đúng Cách", platform: "tiktok",  url: "https://www.tiktok.com/@skincaredungcach.byson" }, // TOP PICK: 12/12 âm thanh gốc, pure skincare/KCN/serum, 120-470s, 1080p 9-23MB
+    { name: "Sâu Biu Ti",        platform: "tiktok",   url: "https://www.tiktok.com/@sobeauty.glx" },        // 12/12 âm thanh gốc, skincare da dầu mụn + KCN budget, daily, 88-152s
+    { name: "Hồ Ánh Trinh",      platform: "tiktok",   url: "https://www.tiktok.com/@kikianhtrinh" },        // 12/12 original sound, makeup+skincare full-face reviews, 82-344s
+    { name: "Kỳ Kỳ",            platform: "tiktok",   url: "https://www.tiktok.com/@unofficiallykyky" },    // 10/12 original sound, skincare talking reviews, 73-306s
+    { name: "An Phương",        platform: "tiktok",   url: "https://www.tiktok.com/@anphuongtruong" },      // 10/12 original, skincare+beauty; scorer filters occasional travel/bag posts
+    { name: "Thanh Phương Lê",  platform: "tiktok",   url: "https://www.tiktok.com/@thanhphuonglede" },     // 11/12 âm thanh gốc, làm đẹp facial+hair/body, 72-333s
   ],
 
   // ── thoi_trang (Thời Trang) — outfit, street style ──
