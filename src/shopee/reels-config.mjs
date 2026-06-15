@@ -210,6 +210,11 @@ export const REELS_SOURCES = {
     { name: "Nguyễn Duy Trung",        platform: "tiktok", url: "https://www.tiktok.com/@duytrung.official" },     // skill creator (Trung Spin Kick), 1M, all videos 32s+
     { name: "Văn Anh Neymar",          platform: "tiktok", url: "https://www.tiktok.com/@vananhneymar" },          // Sport Creator of the Year 2025, challenges/journey, 34-75s
     { name: "Nguyễn Đắc Huy (Futsal)", platform: "tiktok", url: "https://www.tiktok.com/@nguyendachuy_official" }, // futsal nat'l team, training/matches; ~30% clips <30s get filtered
+    // ── ADDED 2026-06-15: World Cup 2026 commentary (SAFE — creator MC talking-head, NOT broadcast highlights).
+    // Verified active 15/6, 34-79s. NOTE: dùng nhạc nền → FB có thể mute audio (dựa caption/visual). KHÔNG thêm
+    // các kênh repost highlight trận đấu (VTV/broadcaster) — FB Rights Manager strike chắc chắn, rủi ro page.
+    { name: "Bóng Đá Vui Vẻ",      platform: "tiktok", url: "https://www.tiktok.com/@bongdavuive8386" },  // MC bình luận hài + dự đoán WC, daily, 23-79s
+    { name: "Bóng Đá Tiếu Lâm TV", platform: "tiktok", url: "https://www.tiktok.com/@bongdatieulamtv" },  // "Gà Siêu Phệ" bình luận/preview WC, 34-66s, 1080p 12.8MB
   ],
 
   // ── bach_hoa (Bách Hóa Online) — general life hacks ──

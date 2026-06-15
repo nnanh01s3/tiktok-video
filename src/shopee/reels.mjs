@@ -483,30 +483,53 @@ if (!topic) {
 // possible. Each source returns ≤5 videos (--playlist-end 5) so worst case
 // is ~50 candidates per page — still cheap (classifier calls are sequential,
 // early-break on first MAX success).
+//
+// Scraping runs CONCURRENTLY (bounded worker pool) — added 2026-06-15. Source
+// scraping is the dominant cost (each TikTok source ~6s, FB CDP ~20s) and grew
+// with the source list (13-21/page). It's network-bound + read-only (no DB
+// writes, no dedup race), so it parallelizes safely. We scrape into a
+// position-indexed array, then collect/dedup SEQUENTIALLY in the original
+// rotation order — preserving the primary-source-first tiebreaker that the
+// downstream soft-rotation sort relies on. Semantics are otherwise identical
+// to the previous sequential loop (same fault isolation, same logging).
+const SCRAPE_CONCURRENCY = 5;
 const newVideos = [];
 const triedSources = [];
+const ordered = [];
 for (let step = 0; step < SOURCES.length; step++) {
   const idx = (sourceIdx + step) % SOURCES.length;
-  const src = SOURCES[idx];
+  ordered.push({ idx, src: SOURCES[idx] });
   triedSources.push(idx);
+}
 
-  // Fault isolation: one source failing (e.g. Facebook CDP timeout) must NOT
-  // kill the whole worker. Before this try/catch, a thrown "CDP timeout"
-  // escaped to the global uncaughtException handler → process.exit(1),
-  // discarding 30+ already-pooled candidates from other sources. Now a
-  // single source failure just skips that source and continues.
-  let videos = [];
-  try {
-    videos = src.platform === "facebook"
-      ? await scrapeFacebook(src.url)
-      : await scrapeYtdlp(src.url, src.platform === "youtube" ? "YouTube" : "TikTok");
-  } catch (e) {
-    log(`   ⚠ Scrape failed [${idx}] ${src.name}: ${e?.message || e} — skipping source`);
-    continue;
+const scraped = new Array(ordered.length); // results keyed by position
+let scrapeCursor = 0;
+async function scrapeWorker() {
+  while (true) {
+    const pos = scrapeCursor++;
+    if (pos >= ordered.length) return;
+    const { idx, src } = ordered[pos];
+    // Fault isolation: one source failing (e.g. Facebook CDP timeout) must NOT
+    // kill the whole worker — it just yields an empty result for that source.
+    try {
+      scraped[pos] = src.platform === "facebook"
+        ? await scrapeFacebook(src.url)
+        : await scrapeYtdlp(src.url, src.platform === "youtube" ? "YouTube" : "TikTok");
+    } catch (e) {
+      log(`   ⚠ Scrape failed [${idx}] ${src.name}: ${e?.message || e} — skipping source`);
+      scraped[pos] = [];
+    }
   }
+}
+await Promise.all(
+  Array.from({ length: Math.min(SCRAPE_CONCURRENCY, ordered.length) }, scrapeWorker)
+);
 
+// Collect + dedup in original rotation order (preserves source-priority tiebreaker).
+for (let pos = 0; pos < ordered.length; pos++) {
+  const { idx, src } = ordered[pos];
   let addedFromSource = 0;
-  for (const v of videos) {
+  for (const v of (scraped[pos] || [])) {
     if (!isVideoPosted(v.id)) {
       v._sourceIdx = idx;
       v._sourceName = src.name;
