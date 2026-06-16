@@ -90,6 +90,29 @@ function run(cmd, timeout = 60000) {
   return spawnSync(cmd, { encoding: "utf8", timeout, shell: true });
 }
 
+// Async (non-blocking) subprocess — REQUIRED for the concurrent scrape pool.
+// spawnSync blocks the entire event loop, so wrapping it in async/Promise.all
+// gives ZERO concurrency (worker #2 can't start until #1's spawnSync returns).
+// runAsync uses spawn so N yt-dlp scrapes genuinely run in parallel.
+// Mirrors run()'s return shape ({stdout, stderr}) so callers swap in cleanly.
+function runAsync(cmd, timeout = 60000) {
+  return new Promise((resolve) => {
+    let stdout = "", stderr = "";
+    let child;
+    try {
+      child = spawn(cmd, { shell: true });
+    } catch (e) {
+      resolve({ stdout: "", stderr: String(e?.message || e) });
+      return;
+    }
+    const timer = setTimeout(() => { try { child.kill("SIGKILL"); } catch {} }, timeout);
+    child.stdout?.on("data", (d) => { stdout += d.toString(); });
+    child.stderr?.on("data", (d) => { stderr += d.toString(); });
+    child.on("close", () => { clearTimeout(timer); resolve({ stdout, stderr }); });
+    child.on("error", (e) => { clearTimeout(timer); resolve({ stdout, stderr: stderr + String(e?.message || e) }); });
+  });
+}
+
 // ── Chrome process tracker ────────────────────────────────────────────────
 // Each scrapeFacebook spawn uses a unique --user-data-dir timestamped path.
 // Chrome inherits that flag into all 7 child processes (gpu/renderer/network/
@@ -186,7 +209,8 @@ process.on("uncaughtException", (e) => {
 async function scrapeYtdlp(profileUrl, platformLabel = "TikTok") {
   log(`🔍 Scrape ${platformLabel}: ${profileUrl}`);
   // --playlist-end 5 = only check 5 most recent videos (fast)
-  const result = run(
+  // runAsync (not run/spawnSync) so the concurrent scrape pool truly parallelizes.
+  const result = await runAsync(
     `"${YTDLP}" --flat-playlist --playlist-end 5 --no-warnings -j "${profileUrl}"`,
     60000
   );
