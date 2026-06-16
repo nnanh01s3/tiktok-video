@@ -516,7 +516,12 @@ if (!topic) {
 // rotation order — preserving the primary-source-first tiebreaker that the
 // downstream soft-rotation sort relies on. Semantics are otherwise identical
 // to the previous sequential loop (same fault isolation, same logging).
-const SCRAPE_CONCURRENCY = 5;
+// 3 (not 5): 8 pages already run in parallel, so per-page concurrency multiplies
+// — 8×5=40 simultaneous yt-dlp (each spawning a deno JS-challenge subprocess,
+// ~80 procs) hammered TikTok into heavy rate-limiting (27 challenge-fails in one
+// slot) and crashed the run mid-slot. 8×3=24 keeps most of the speedup with far
+// less resource + rate-limit pressure.
+const SCRAPE_CONCURRENCY = 3;
 const newVideos = [];
 const triedSources = [];
 const ordered = [];
