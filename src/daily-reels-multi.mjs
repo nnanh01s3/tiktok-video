@@ -34,6 +34,21 @@ import { startKeepAwake } from "./keep-awake.mjs";
 // overnight (23:37 11/6 mid-chiều). Keeper self-releases on exit.
 startKeepAwake();
 
+// Resilience (added 2026-06-17): on fast runs the orchestrator vanished
+// silently after ~3 slots — no exception logged, no OS crash event, main()'s
+// .catch() never fired. That signature = a stray async error in a callback
+// OUTSIDE main()'s promise chain (a Chrome-kill execSync, a worker stdout
+// handler, or the 60s sweep interval) becoming an uncaughtException, which by
+// default terminates Node. Each slot is independent, so dying mid-run is the
+// worst outcome. These handlers log the error loudly (so the cause is finally
+// visible) and DO NOT exit — the run continues to the next slot.
+process.on("uncaughtException", (err) => {
+  console.error(`[${new Date().toISOString()}] ⚠ uncaughtException (continuing):`, err?.stack || err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[${new Date().toISOString()}] ⚠ unhandledRejection (continuing):`, reason?.stack || reason);
+});
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
@@ -360,7 +375,15 @@ async function main() {
       logC(`━━━ [${slotIdx}/${totalSlots}] ${dateStr} ${label} ${start}-${end} ━━━`);
       logC(`    Log: ${logFile}`);
 
-      const result = await runSlot(d, start, end, label, dateStr, logFile);
+      // Per-slot fault isolation: a slot that throws must not abort the run —
+      // log it and continue so the remaining slots still get scheduled.
+      let result;
+      try {
+        result = await runSlot(d, start, end, label, dateStr, logFile);
+      } catch (err) {
+        console.error(`[${vnTs()}] ⚠ slot ${label} threw (skipping to next):`, err?.stack || err);
+        result = { posted: 0, total: REEL_PAGES.length, missed: [...REEL_PAGES] };
+      }
       summary.push({ dateStr, label, ...result });
 
       const icon = result.posted === result.total ? "✅" : result.posted > 0 ? "⚠️" : "❌";
