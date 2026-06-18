@@ -54,6 +54,29 @@ export const DOUYIN_CONFIG = {
     alignment: 2,
   },
 
+  // YouTube reup mode: remove source watermark → cut content segments →
+  // add our logo + numbered cover. No translation (source already VN).
+  ytreup: {
+    // Source watermark to remove (delogo box). Set per source video.
+    // Zzzphim (NHy89bOAWtU): bottom-left "Zzzphim" text.
+    delogo: { x: 2, y: 674, w: 140, h: 40 },
+    aspect: "keep",            // "keep" = 16:9 (1280x720) | "vertical" = 9:16 letterbox
+    crf: 21,
+    preset: "ultrafast",
+    // Our channel logo overlay (PNG with alpha). null = skip until provided.
+    logoPath: null,
+    logoX: 30, logoY: 24, logoWidthPx: 160,
+    cover: {
+      width: 1280, height: 720,
+      bandH: 170,              // dark band height at bottom for the label
+      textY: "h-135",          // label vertical position (centered in band)
+      fontSize: 90,
+      textColor: "white",
+      borderW: 5,
+      fontFile: "C:/Windows/Fonts/arialbd.ttf",  // bold; swap to a VN-friendly font if needed
+    },
+  },
+
   // Recap mode (解说/thuyết minh style — like VN anime-recap channels):
   // continuous VN narration + caption box + ducked original BGM, 16:9 output.
   recap: {
