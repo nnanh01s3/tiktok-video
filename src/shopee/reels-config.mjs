@@ -173,7 +173,7 @@ export const REELS_SOURCES = {
     { name: "Làm Mẹ Cùng Phương", platform: "tiktok", url: "https://www.tiktok.com/@lammecungphuongg" },  // daily, mẹ bỉm review (bỉm, sữa, ăn dặm), 6.2 MB raw
     { name: "Sếp An Nhàn",       platform: "tiktok",   url: "https://www.tiktok.com/@sepannhan" },          // daily, parenting/dạy con (bé Bống), 8.6 MB raw
     { name: "Tina Thảo Thi",     platform: "tiktok",   url: "https://www.tiktok.com/@tinathaothi" },        // daily, top VN parenting/family creator ~5M, 68 MB raw
-    { name: "Gia Đình Truyền Hình", platform: "tiktok", url: "https://www.tiktok.com/@giadinhtruyenhinh" }, // daily, family vlog (kids/parenting), 16.4 MB raw
+    // REMOVED 2026-06-18: Gia Đình Truyền Hình (@giadinhtruyenhinh) — copyright claims on reposts (user request)
   ],
 
   // ── the_thao (Thể Thao) — fitness, workout, outdoor ──
