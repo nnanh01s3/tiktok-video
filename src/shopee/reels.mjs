@@ -209,8 +209,16 @@ process.on("uncaughtException", (e) => {
 async function scrapeYtdlp(profileUrl, platformLabel = "TikTok") {
   log(`🔍 Scrape ${platformLabel}: ${profileUrl}`);
   // --playlist-end 5 = only check 5 most recent videos (fast)
-  // runAsync (not run/spawnSync) so the concurrent scrape pool truly parallelizes.
-  const result = await runAsync(
+  // REVERTED to run()/spawnSync 2026-06-19: runAsync (spawn shell:true, non-
+  // blocking) leaked conhost.exe — each call spawns cmd.exe + a Console Host,
+  // and at ~144 scrapes/slot the non-blocking spawns piled up ~68 conhost
+  // processes, exhausting console/handle resources and crashing the run at
+  // ~15 min (every cap value, even 1). spawnSync also spawns conhost but
+  // BLOCKS — the host is reaped before the next call, so no pileup. This is
+  // the Tuesday-stable path (which ran 4.5h, 5/5). deno + the updated yt-dlp
+  // are unaffected (yt-dlp spawns deno itself). Trade-off: scraping is
+  // sequential/blocking again (slower) but the run completes reliably.
+  const result = run(
     `"${YTDLP}" --flat-playlist --playlist-end 5 --no-warnings -j "${profileUrl}"`,
     60000
   );
