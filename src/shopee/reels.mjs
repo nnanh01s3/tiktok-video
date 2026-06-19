@@ -516,12 +516,18 @@ if (!topic) {
 // rotation order — preserving the primary-source-first tiebreaker that the
 // downstream soft-rotation sort relies on. Semantics are otherwise identical
 // to the previous sequential loop (same fault isolation, same logging).
-// 3 (not 5): 8 pages already run in parallel, so per-page concurrency multiplies
-// — 8×5=40 simultaneous yt-dlp (each spawning a deno JS-challenge subprocess,
-// ~80 procs) hammered TikTok into heavy rate-limiting (27 challenge-fails in one
-// slot) and crashed the run mid-slot. 8×3=24 keeps most of the speedup with far
-// less resource + rate-limit pressure.
-const SCRAPE_CONCURRENCY = 3;
+// 1 (reverted from 3, then 5): per-page concurrency MULTIPLIES across the 8
+// already-parallel pages. cap=5 → 8×5=40 simultaneous yt-dlp (+ a deno each
+// = ~80 procs); cap=3 → 24. Both destabilized the machine: runs that were
+// rock-solid pre-A (Tuesday, sequential, completed 5/5) started dying mid-run
+// or at slot transitions (Wed/Thu/Fri) with no JS error, no crash event — a
+// native/resource death from the subprocess storm. For a pipeline the user
+// depends on daily, RELIABILITY beats speed: cap=1 restores the pre-A
+// concurrency level (8 pages × 1 = 8 concurrent scrapes, the known-stable
+// Tuesday baseline) while keeping the clean non-blocking runAsync path.
+// Re-introduce higher concurrency only after the resource leak is root-caused
+// (e.g. a global cross-page scrape budget instead of per-page).
+const SCRAPE_CONCURRENCY = 1;
 const newVideos = [];
 const triedSources = [];
 const ordered = [];
