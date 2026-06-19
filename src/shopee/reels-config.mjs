@@ -52,6 +52,8 @@ export const REELS_SOURCES = {
     // ── ADDED 2026-06-14: source expansion for 5-slot cadence (niche sparse — only 2 confirmed). ──
     { name: "Idea Shop VN",            platform: "tiktok", url: "https://www.tiktok.com/@ideashopvn" },           // EDC/fidget/novelty gadgets, 180-314s very long → always clears 2MB, active 2026-06
     { name: "Gia Dụng Tiện Ích TM",    platform: "tiktok", url: "https://www.tiktok.com/@giadungtienichthongminh3" }, // gadget tiện ích demos, MULTIPLE posts/day (high inventory), 42-57s, original-sound
+    // ── ADDED 2026-06-19: shopee weakest page (56% miss) — niche genuinely sparse, only 1 new verified ──
+    { name: "Jan2 Decor",              platform: "tiktok", url: "https://www.tiktok.com/@jan2.decor" },          // "tổng hợp món đồ bếp/nhà cửa" gadget roundups, 6/8 ≥40s (med ~85s), 1080p 16-30MB, âm thanh gốc; ~50% on-niche
   ],
 
   // ── gia_dung (Đồ Gia Dụng) — kitchen, smart home, appliances ──
@@ -83,6 +85,11 @@ export const REELS_SOURCES = {
     { name: "Kiên Review",             platform: "tiktok",   url: "https://www.tiktok.com/@kienthanhle90" },          // "thánh review" test/đập hộp, daily, 36-111s, gadgets+small appliances+smart home
     { name: "Hạnh Chia Sẻ",            platform: "tiktok",   url: "https://www.tiktok.com/@hanhchiase.xaykenh" },     // self-test reviews, daily, 43-77s, 6/6 âm thanh gốc, máy làm đá/quạt/ổ cắm/đèn
     { name: "Trung Quốc Có Gì Hot",    platform: "tiktok",   url: "https://www.tiktok.com/@trungquoccogihot12021988" }, // kitchen/cleaning gadget "có thật sự tốt?" tests, 47-76s, most on-topic kitchen
+    // ── ADDED 2026-06-19: gia_dung still missed ~39% — more "thử nghiệm/có thật sự tốt" long-format channels ──
+    { name: "Đen Đá Trải Nghiệm",      platform: "tiktok",   url: "https://www.tiktok.com/@dendatrainghiem" },        // BEST archetype: "có thực sự tốt như quảng cáo" tests, 8/8 ≥40s (med 238s!), multi/day, 8/8 âm thanh gốc
+    { name: "Điện Máy Xanh OL",        platform: "tiktok",   url: "https://www.tiktok.com/@dienmayxanh.ol" },          // official high-inventory điện máy/gia dụng, 7/8 ≥40s, 1080p 10.7MB, 8/8 âm thanh gốc
+    { name: "Điện Máy Huân Liên",      platform: "tiktok",   url: "https://www.tiktok.com/@dienmayhuanlien0" },       // máy bơm/tưới vườn "có nên mua", 8/8 ≥40s (53-123s), 720p verified, daily
+    { name: "NV Tỷ Đồ Nghề",           platform: "tiktok",   url: "https://www.tiktok.com/@nvty75" },                  // home tools/gadgets "có nên mua", 8/8 ≥40s (68-155s); mostly commercial-audio
   ],
 
   // ── tech (Đồ Công Nghệ) — gadgets, phone, reviews ──
@@ -156,6 +163,12 @@ export const REELS_SOURCES = {
     { name: "Bim Nguyễn",       platform: "tiktok", url: "https://www.tiktok.com/@bimnguyen58" },          // daily, styling tips + try-on haul, 28.7 MB raw
     { name: "Tudo Khánh Linh",  platform: "tiktok", url: "https://www.tiktok.com/@tudokhanhlinh" },        // daily, fashion creator (OOTD/styling), 13.5 MB raw
     { name: "The Navarose",      platform: "tiktok", url: "https://www.tiktok.com/@the.navarose" },         // daily, fashion KOL ~5.6M followers, 5.3 MB raw
+    // ── ADDED 2026-06-19: thoi_trang missed ~49% — OOTD/try-on long-format expansion (prefer the ≥40s ones) ──
+    { name: "Cao Kim Chi",       platform: "tiktok", url: "https://www.tiktok.com/@caokiimchi" },           // OOTD/mix đồ/try-on, 8/8 ≥40s (48-109s), 1080p 10MB, 7/8 âm thanh gốc — strongest
+    { name: "Minh Hải Review",   platform: "tiktok", url: "https://www.tiktok.com/@minhhaireview2" },        // review quần áo nữ+unisex, MULTI/day (high inventory), 7/8 ≥40s (39-171s), 8/8 gốc
+    { name: "nghĩa (ajihgnn)",   platform: "tiktok", url: "https://www.tiktok.com/@nnghija" },               // outfit/ratingoutfits/haul, 4/8 ≥40s (44-146s), 1080p 13MB best-bitrate, 7/8 gốc
+    { name: "Hùng Phạm",         platform: "tiktok", url: "https://www.tiktok.com/@iam.hung2702" },          // men's fashion (zip shirt/fitcheck/sơ mi), 6/8 ≥40s (41-90s)
+    { name: "Teddy (Phi Vĩ)",    platform: "tiktok", url: "https://www.tiktok.com/@teddy2606" },             // men's OOTD #daily, multi/day, 8/8 âm thanh gốc; ~half clips short (<40s skip)
   ],
 
   // ── me_be (Mẹ & Bé) — parenting, baby products ──
