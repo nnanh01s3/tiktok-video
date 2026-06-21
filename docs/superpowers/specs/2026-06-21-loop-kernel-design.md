@@ -97,7 +97,7 @@ Hợp đồng giữa kernel và một job. Mọi trường tuỳ chọn đều c
   },
   verify: async (result, item) => ({ ok: true, reason: "", skip: false }), // tuỳ chọn; mặc định = result.ok
   retry: { maxAttempts: 2 },        // tuỳ chọn; mặc định { maxAttempts: 1 } (không retry)
-  escalate: { on: "exhausted" },    // tuỳ chọn; mặc định escalate khi hết retry
+  dedup: false,                     // tuỳ chọn; mặc định = Boolean(discover). true = skip done/dead vĩnh viễn
 }
 ```
 
@@ -110,10 +110,11 @@ Hợp đồng giữa kernel và một job. Mọi trường tuỳ chọn đều c
 `runJob(descriptor, { dryRun, store })` — chạy một job qua đủ 5 bước cho mọi item của nó:
 
 ```
-items = await descriptor.discover()                    // ① Discover
+dedup = descriptor.dedup ?? Boolean(descriptor.discover)
+items = await descriptor.discover()                    // ① Discover (mặc định [{id:"run"}])
 for item in items:
     st = store.get(descriptor.id, item.id)
-    if st?.status in {done, dead}: continue            // ② Assign (idempotency)
+    if dedup and st?.status in {done, dead}: continue  // ② Assign (idempotency, chỉ khi dedup)
     if assignLimitReached(): break                     // ② Assign (rate limit)
     store.upsert(descriptor.id, item.id, { status: "running" })
     if dryRun:
@@ -129,10 +130,13 @@ for item in items:
     else:
         attempts = (st?.attempts ?? 0) + 1
         if attempts >= descriptor.retry.maxAttempts:
-            store.upsert(id, item.id, { status: "dead", attempts, last_error: v.reason })
             await escalate({ jobId: id, itemId: item.id, step: "verify", reason: v.reason, attempts, logTail })
+            if dedup:
+                store.upsert(id, item.id, { status: "dead", attempts, last_error: v.reason })   // terminal
+            else:
+                store.upsert(id, item.id, { status: "failed", attempts: 0, last_error: v.reason }) // reset, chạy lại tick sau
         else:
-            store.upsert(id, item.id, { status: "failed", attempts, last_error: v.reason })  // → pending lần sau
+            store.upsert(id, item.id, { status: "failed", attempts, last_error: v.reason })  // → chạy lại tick sau
 ```
 
 `runAll(registry, opts)` — chạy các job theo cùng kiểu song song/staggered như `daily.mjs` hôm nay (giữ nguyên cửa sổ lịch `--schedule-at` / `--schedule-end` và các stagger). Mỗi job được bọc try/catch: **một job crash không được giết cả loop**.
@@ -199,11 +203,15 @@ Bọc util Telegram hiện có. Message có cấu trúc thay vì `❌` cụt:
 
 ## 5. Idempotency & chống đăng trùng
 
-Đây là ràng buộc an toàn quan trọng nhất — double-post lên FB/TikTok là tác hại thật.
+Double-post lên FB/TikTok là tác hại thật, nhưng cơ chế dedup **chỉ áp dụng cho job lộ item id thật** — nếu áp cho job single-run sẽ làm đứng luồng đăng hằng ngày.
 
-- Bước Assign **bỏ qua mọi item `done`/`dead`**. Central state *chính là* lá chắn dedup.
-- Hệ quả: chạy lại `daily.mjs` bao nhiêu lần trong ngày cũng không đăng lại item đã `done`.
-- `status: "running"` được ghi *trước* khi Run. Nếu process chết giữa chừng, item ở `running` → tick sau xử lý lại (an toàn vì publish thật của job nên tự kiểm tra trùng ở tầng của nó; v1 chấp nhận khả năng hiếm chạy lại một item đang dở).
+- Descriptor có cờ `dedup`, mặc định `= Boolean(descriptor.discover)`:
+  - **`dedup: true`** (job *có* `discover`, lộ item id thật — vd Douyin video ở v2): Assign **bỏ qua item `done`/`dead` vĩnh viễn**. Central state là lá chắn chống tái xử lý cùng một item.
+  - **`dedup: false`** (job black-box v1 — TikTok, 8 page Shopee — không có `discover`): chạy **mỗi tick**, không bị skip. Việc chống trùng *sản phẩm* nằm bên trong `reup.mjs`/pipeline; kernel chỉ ghi kết quả mới nhất + verify + escalate.
+- Trạng thái khi lỗi:
+  - `dedup: true` → hết retry thành `dead` (terminal, skip vĩnh viễn).
+  - `dedup: false` → hết retry thì escalate rồi **reset `attempts` về 0**, status `failed` (vẫn chạy lại tick sau). Hệ quả: escalate sau mỗi `maxAttempts` lần lỗi *liên tiếp*, không spam mỗi tick.
+- `status: "running"` được ghi *trước* khi Run. Nếu process chết giữa chừng, item ở `running` → tick sau xử lý lại (an toàn vì publish thật của job tự kiểm tra trùng ở tầng của nó).
 
 ---
 
