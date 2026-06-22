@@ -219,7 +219,11 @@ async function scrapeYtdlp(profileUrl, platformLabel = "TikTok") {
   // are unaffected (yt-dlp spawns deno itself). Trade-off: scraping is
   // sequential/blocking again (slower) but the run completes reliably.
   const result = run(
-    `"${YTDLP}" --flat-playlist --playlist-end 5 --no-warnings -j "${profileUrl}"`,
+    // --socket-timeout/--retries: yt-dlp aborts a stalled scrape itself. Without
+    // this, a network-hung scrape hangs forever — spawnSync's `timeout` does NOT
+    // reliably kill a shell:true child on Windows (the cmd.exe dies but yt-dlp
+    // survives and stdio stays open), so the worker froze mid-slot. (2026-06-22)
+    `"${YTDLP}" --flat-playlist --playlist-end 5 --no-warnings --socket-timeout 30 --retries 2 -j "${profileUrl}"`,
     60000
   );
   if (!result.stdout) {
