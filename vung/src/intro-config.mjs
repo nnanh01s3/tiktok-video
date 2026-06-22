@@ -130,31 +130,6 @@ export const INTRO_SUBSHOTS = [
 ];
 
 /**
- * Episode outro / CTA template (scene 15).
- * Single sub-shot — outro is simpler than intro.
- */
-export const OUTRO_SUBSHOTS = [
-  {
-    id: "warm_sunset_forest",
-    durationSec: 8.0,
-    chainFromPrevious: false,
-    imagenPrompt: [
-      "Warm sunset forest scene with magical atmosphere",
-      "Soft pink and orange sky, silhouetted trees, gentle bokeh lights",
-      "Cute friendly inviting mood, cinematic wide shot",
-      "Pixar 3D cartoon style, dreamy fairytale lighting",
-      COMMON_NEGATIVE,
-    ].join(". "),
-    motionPrompt: [
-      "Camera slowly pulls back from the sunset forest",
-      "Gentle zoom out revealing more of the magical landscape",
-      "Sparkling fireflies floating in warm golden light",
-      "Pixar 3D cartoon, cinematic peaceful ending shot",
-    ].join(". "),
-  },
-];
-
-/**
  * Get sub-shots template for a title scene.
  *
  * @param {import("./scene-parser.mjs").ParsedScene} scene
@@ -162,7 +137,6 @@ export const OUTRO_SUBSHOTS = [
  */
 export function getSubShotsForTitleScene(scene) {
   if (scene.isFirstScene) return INTRO_SUBSHOTS;
-  if (scene.isLastScene) return OUTRO_SUBSHOTS;
   // Fallback: single empty sub-shot (shouldn't reach here for title scenes)
   return INTRO_SUBSHOTS.slice(0, 1);
 }

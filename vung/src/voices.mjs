@@ -53,6 +53,63 @@ export const CHARACTERS = {
     visualPrompt: null,
     negativePrompt: null,
   },
+  // ── Secondary characters (appear in specific episodes) ──
+  "sóc phụ": {
+    name: "Sóc phụ",
+    role: "squirrel-extra",
+    voice: "Puck", // Upbeat, quick
+    style: "Speak quick, casual. Vietnamese.",
+    visualPrompt: "a small squirrel, brown fur, fluffy tail, cute expression",
+    negativePrompt: null,
+  },
+  chim: {
+    name: "Chim",
+    role: "bird-messenger",
+    voice: "Fenrir", // Warm
+    style: "Speak casual, relaxed. Vietnamese.",
+    visualPrompt: "a small colorful bird, messenger bird perched on a branch",
+    negativePrompt: null,
+  },
+  "chim khác": {
+    name: "Chim khác",
+    role: "bird-messenger-2",
+    voice: "Sadaltager", // Calm
+    style: "Speak chill, nonchalant. Vietnamese.",
+    visualPrompt: "a different small bird, slightly different color from the first bird",
+    negativePrompt: null,
+  },
+  "thỏ rừng": {
+    name: "Thỏ rừng",
+    role: "rabbit-extra",
+    voice: "Aoede", // Bright
+    style: "Speak cheerful, fast, excited. Vietnamese.",
+    visualPrompt: "a small cute rabbit, white and brown fur, long ears, energetic",
+    negativePrompt: null,
+  },
+  "người bán": {
+    name: "Người bán",
+    role: "weasel-seller",
+    voice: "Kore", // Firm, informative — salesman pitch
+    style: "Speak confident, smooth salesman tone, slightly pitchy and persuasive, Southern Vietnamese.",
+    visualPrompt: "a slick weasel shopkeeper, sleek brown fur with cream belly, long slim body, sly confident smile, wearing a small green apron and a leaf-shaped name tag, cheerful salesman pose",
+    negativePrompt: "human, person, realistic, scary, dark, low quality",
+  },
+  "bạn nhỏ": {
+    name: "Bạn nhỏ",
+    role: "young-bird",
+    voice: "Zephyr", // Bright, youthful — small scared bird
+    style: "Speak small, slightly trembling, scared but hopeful, young child voice, Southern Vietnamese.",
+    visualPrompt: "a small fledgling bird, fluffy yellow and pale-blue feathers, oversized round eyes filled with worry, tiny wings, perched timidly on a stone",
+    negativePrompt: "scary, dark, predator, human, realistic, low quality",
+  },
+  "cô cú mèo": {
+    name: "Cô cú mèo",
+    role: "owl-teacher",
+    voice: "Leda", // Calm female — teacher voice
+    style: "Speak gentle, patient, warm teacher tone, slightly slow and clear pronunciation, Southern Vietnamese.",
+    visualPrompt: "a wise owl teacher, soft tawny brown feathers with cream chest, big round amber eyes, wearing small round glasses and a tiny pastel scarf, kind smile, perched in a teacher pose",
+    negativePrompt: "scary owl, dark, predator look, human, realistic, low quality",
+  },
 };
 
 /**
@@ -76,6 +133,18 @@ const CHARACTER_ALIASES = {
   "voice over": "narrator",
   "voiceover": "narrator",
   "vo": "narrator",
+  "sóc": "sóc phụ",
+  "sóc con": "sóc phụ",
+  "vo / chim đưa tin": "narrator",
+  "vo phụ": "narrator",
+  "offscreen": "narrator",
+  "off-screen": "narrator",
+  "chủ quầy phụ": "người bán",
+  "chủ quầy": "người bán",
+  "thỏ rừng": "thỏ rừng",
+  "chim phụ": "chim",
+  "nhím phụ": "sóc phụ",
+  "thỏ phụ nhỏ": "sóc phụ",
 };
 
 /**

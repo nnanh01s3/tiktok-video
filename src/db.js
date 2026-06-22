@@ -89,6 +89,26 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_videos_niche_date   ON videos(niche, posted_at);
     CREATE INDEX IF NOT EXISTS idx_hashtag_niche       ON hashtag_pool(niche, active);
     CREATE INDEX IF NOT EXISTS idx_analytics_date      ON analytics_daily(date, niche);
+
+    CREATE TABLE IF NOT EXISTS posted_reels (
+      video_id       TEXT PRIMARY KEY,
+      source_url     TEXT NOT NULL,
+      source_name    TEXT,
+      page_name      TEXT NOT NULL,
+      niche          TEXT NOT NULL,
+      posted_at      TEXT NOT NULL,
+      scheduled_at   TEXT,
+      pfm_post_id    TEXT,
+      topic_score    REAL,
+      video_title    TEXT,
+      video_duration INTEGER,
+      file_size_mb   REAL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_posted_reels_page_date
+      ON posted_reels(page_name, posted_at);
+    CREATE INDEX IF NOT EXISTS idx_posted_reels_source
+      ON posted_reels(source_name);
   `);
 
   // --- Migrations ---
@@ -155,15 +175,10 @@ export function getUnusedQuotes(category, limit = 5) {
     if (combined.length >= limit) return combined.slice(0, limit);
   }
 
-  // Fallback to old quotes table
-  return db
-    .prepare(
-      `SELECT * FROM quotes
-       WHERE category = ? AND (used_count = 0 OR last_used_at < datetime('now', '-90 days'))
-       ORDER BY used_count ASC, RANDOM()
-       LIMIT ?`
-    )
-    .all(category, limit);
+  // NO fallback to old quotes table (v1) — that data contains AI-fabricated
+  // quotes and English categories no longer used. Only quotes_v2 (verified,
+  // attributed, Vietnamese) is the source of truth.
+  return combined.length > 0 ? combined.slice(0, limit) : v2Quotes;
 }
 
 export function markQuotesUsed(ids) {
@@ -172,14 +187,10 @@ export function markQuotesUsed(ids) {
   const stmtV2 = db.prepare(
     `UPDATE quotes_v2 SET times_used = times_used + 1, used_at = datetime('now') WHERE id = ?`
   );
-  // Update old quotes table (for fallback quotes)
-  const stmtOld = db.prepare(
-    `UPDATE quotes SET used_count = used_count + 1, last_used_at = datetime('now') WHERE id = ?`
-  );
+  // Old quotes table (v1) no longer updated — only quotes_v2 is used.
   const tx = db.transaction((ids) => {
     for (const id of ids) {
       stmtV2.run(id);
-      stmtOld.run(id);
     }
   });
   tx(ids);
@@ -195,15 +206,9 @@ export function getQuoteStats() {
        FROM quotes_v2 GROUP BY category`
     )
     .all();
-  const oldStats = db
-    .prepare(
-      `SELECT category, COUNT(*) as total,
-              SUM(CASE WHEN used_count = 0 THEN 1 ELSE 0 END) as unused,
-              'legacy' as source
-       FROM quotes GROUP BY category`
-    )
-    .all();
-  return [...v2Stats, ...oldStats];
+  // Old quotes table (v1) excluded — contains AI-fabricated data.
+  // Only quotes_v2 is the source of truth.
+  return v2Stats;
 }
 
 // --- Video job helpers ---
@@ -272,4 +277,112 @@ export function closeDb() {
     _db.close();
     _db = null;
   }
+}
+
+// --- posted_reels helpers (cross-page permanent blocklist) ---
+
+export function isVideoPosted(videoId) {
+  if (!videoId) return false;
+  const db = getDb();
+  return Boolean(
+    db.prepare("SELECT 1 FROM posted_reels WHERE video_id = ?").get(videoId)
+  );
+}
+
+export function recordPostedVideo(entry) {
+  if (!entry?.video_id || !entry?.page_name || !entry?.posted_at) {
+    throw new Error("recordPostedVideo: video_id, page_name, posted_at required");
+  }
+  const db = getDb();
+  db.prepare(`
+    INSERT OR IGNORE INTO posted_reels (
+      video_id, source_url, source_name, page_name, niche,
+      posted_at, scheduled_at, pfm_post_id, topic_score,
+      video_title, video_duration, file_size_mb
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    entry.video_id,
+    entry.source_url || "",
+    entry.source_name || null,
+    entry.page_name,
+    entry.niche || entry.page_name,
+    entry.posted_at,
+    entry.scheduled_at || null,
+    entry.pfm_post_id || null,
+    entry.topic_score ?? null,
+    entry.video_title?.slice(0, 200) || null,
+    entry.video_duration ?? null,
+    entry.file_size_mb ?? null
+  );
+}
+
+export function getPostedStats() {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT page_name, COUNT(*) AS n, MAX(posted_at) AS latest
+       FROM posted_reels GROUP BY page_name ORDER BY n DESC`
+    )
+    .all();
+}
+
+/**
+ * Return Set of source_names used in last N posts for a page.
+ * Used by soft rotation in reels.mjs — candidates from recent sources
+ * are deprioritized (not banned) so diversity emerges naturally.
+ * Excludes 'legacy_migration' entries (which have no useful source info).
+ */
+export function getRecentSourceNames(pageName, limit = 5) {
+  if (!pageName) return new Set();
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT source_name FROM posted_reels
+       WHERE page_name = ?
+         AND source_name IS NOT NULL
+         AND source_name != 'legacy_migration'
+       ORDER BY posted_at DESC
+       LIMIT ?`
+    )
+    .all(pageName, limit);
+  return new Set(rows.map((r) => r.source_name));
+}
+
+// --- content_library helpers (Tuệ Đàm stories pipeline) ---
+
+/**
+ * Pick the next story to post from content_library.
+ * Strategy: least used_count first; tie-break by oldest used_at (NULL treated as oldest).
+ * Filters: { id, type, category } — all optional, all AND-combined.
+ *
+ * @param {{id?: number, type?: 'story'|'book'|'concept', category?: string}} [filters]
+ * @returns {Object|null} story row, or null if no match
+ */
+export function getNextStory(filters = {}) {
+  const db = getDb();
+  let sql = `SELECT id, type, title, category, content_vi, lesson_vi,
+                    quote, quote_vi, author, year, metadata, used_count, used_at
+             FROM content_library WHERE 1=1`;
+  const params = [];
+  if (filters.id) { sql += ` AND id = ?`; params.push(filters.id); }
+  if (filters.type) { sql += ` AND type = ?`; params.push(filters.type); }
+  if (filters.category) { sql += ` AND category = ?`; params.push(filters.category); }
+  sql += ` ORDER BY used_count ASC, COALESCE(used_at, '1970-01-01') ASC LIMIT 1`;
+  return db.prepare(sql).get(...params) || null;
+}
+
+/**
+ * Mark a content_library story as used: increment used_count, set used_at = now.
+ * Idempotent: caller responsible for only calling AFTER successful upload.
+ *
+ * @param {number} id - content_library row id
+ */
+export function markStoryUsed(id) {
+  if (!id) return;
+  const db = getDb();
+  db.prepare(`
+    UPDATE content_library
+    SET used_count = used_count + 1, used_at = datetime('now')
+    WHERE id = ?
+  `).run(id);
 }

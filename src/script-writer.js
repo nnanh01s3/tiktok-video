@@ -161,8 +161,12 @@ QUY TẮC CẢNH QUAY (scenes) — HÌNH ẢNH PHẢI KHỚP VỚI NỘI DUNG:
   + Quote về lòng nhân ái → hình núi non hùng vĩ (generic)
   + Dùng hình "đẹp nhưng vô nghĩa" không liên quan đến nội dung
 - MỖI cảnh phải KHÁC BIỆT về địa điểm, ánh sáng, tông màu
-- Phải có sự tiến triển hình ảnh: cảnh 1 tối/mơ hồ → cảnh cuối sáng/rõ ràng
-- Format: "Vertical 9:16 video. [mô tả cảnh CỤ THỂ matching quote content]. No text, no people talking. Cinematic, smooth camera movement."
+- Phải có sự tiến triển hình ảnh: cảnh 1 mờ/bình minh → cảnh cuối sáng rõ/rực rỡ
+- ÁNH SÁNG phải SÁNG và ẤM ÁP (bright, warm, well-lit):
+  + Ưu tiên: golden hour, morning light, soft daylight, warm sunbeams, luminous atmosphere
+  + TRÁNH: dark/moody/night/rainy/foggy (trừ khi quote THẬT SỰ cần dark aesthetic)
+  + Ngay cả cảnh "nghiêm trọng/kịch tính" cũng nên có bright accent lighting (candlelight, lantern glow, sunlit dust particles)
+- Format: "Vertical 9:16 video. [mô tả cảnh CỤ THỂ matching quote content]. Bright cinematic lighting, warm tones. No text, no people talking. Cinematic, smooth camera movement."
 
 QUY TẮC HOOK VIDEO (hookVeoPrompt) — Veo 3.1 với ÂM THANH tự nhiên:
 - Tạo 1 prompt cho video MỞ ĐẦU 8 giây bằng Veo 3.1 (model có tạo ÂM THANH sống động)
@@ -180,8 +184,11 @@ QUY TẮC HOOK VIDEO (hookVeoPrompt) — Veo 3.1 với ÂM THANH tự nhiên:
   + Hoặc aerial descending vào chủ thể
   + Hoặc tracking shot xuyên qua cảnh
   + Hoặc dolly zoom tạo hiệu ứng vertigo
+- ÁNH SÁNG của HOOK phải SÁNG ẤM cuốn hút ngay từ giây đầu:
+  + Ưu tiên golden hour, warm morning light, luminous atmosphere, bright well-lit composition
+  + Tránh tone đen tối toàn bộ khung hình; nếu dramatic, dùng warm accent lighting
 - Format BẮT BUỘC:
-  "Vertical 9:16 cinematic video, 8 seconds. [Mô tả cảnh CHI TIẾT liên quan trực tiếp đến chủ đề quotes]. Camera: [chuyển động camera cụ thể]. Sound: [âm thanh tự nhiên cụ thể, mô tả chi tiết]. Mood: [cảm xúc]. Hyperrealistic, film grain, no text overlay, no speech, no background music."
+  "Vertical 9:16 cinematic video, 8 seconds. [Mô tả cảnh CHI TIẾT liên quan trực tiếp đến chủ đề quotes]. Camera: [chuyển động camera cụ thể]. Sound: [âm thanh tự nhiên cụ thể, mô tả chi tiết]. Lighting: bright cinematic with warm tones. Mood: [cảm xúc]. Hyperrealistic, film grain, no text overlay, no speech, no background music."
 
 
 Return JSON:

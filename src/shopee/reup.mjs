@@ -6,6 +6,7 @@
  *   node src/shopee/reup.mjs --page gia_dung   # Đồ Gia Dụng (FB only)
  *   node src/shopee/reup.mjs --page tech        # Công Nghệ (FB only)
  *   node src/shopee/reup.mjs --list             # List available pages
+ *   node src/shopee/reup.mjs --page <key> --dry-run  # Inspect top-N without posting
  *
  * Flow:
  *  1. Shopee Affiliate API → products with video + commission
@@ -24,7 +25,7 @@ import {
 import { join } from "path";
 import { genCaptionAI, genCaptionFallback } from "./caption.mjs";
 import { ShopeeAffiliate, closeCdpBrowser } from "./affiliate.mjs";
-import { shortenUrl } from "./shorten_url.mjs";
+import { getShortLinkFromCsv } from "./short_link_lookup.mjs";
 import { PAGES, FFMPEG, FONT, BASE_DIR, MAX_PER_DAY, MAX_PER_RUN } from "./config.mjs";
 
 // ── Parse CLI args ─────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ const PAGE = PAGES[pageArg];
 const BASE_DELAY = args.includes("--delay")
   ? parseInt(args[args.indexOf("--delay") + 1]) || 0
   : 0; // phút delay trước khi schedule video đầu tiên
+const DRY_RUN = args.includes("--dry-run");
 // Spacing between 2 videos from the same page. Reduced from 5→2 minutes
 // so the entire daily batch (18 FB videos) fits in a 15-minute window per
 // user request. Old value: 5 (spread up to 46 min). New value: 2.
@@ -85,6 +87,7 @@ function resetIfNewDay(state) {
   const today = new Date().toISOString().slice(0, 10);
   if (state.last_reset !== today) { state.posts_today = []; state.last_reset = today; }
   if (!Array.isArray(state.used_shopee_ids)) state.used_shopee_ids = [];
+  if (!Array.isArray(state.processed_ids)) state.processed_ids = [];
   return state;
 }
 function loadCaptionHistory() {
@@ -102,53 +105,25 @@ async function discoverProducts(usedIds) {
     log("ℹ️  Chưa có Shopee Affiliate cookies");
     return [];
   }
-
   try {
     const opts = {
+      strategy: PAGE.strategy || "random",
       categoriesPerRun: 4,
-      productsPerCat: 4,
+      productsPerCat: PAGE.strategy === "bestseller" ? 50 : 4,
       minCommission: 0,
-      videoOnly: true,
+      videoOnly: PAGE.strategy === "bestseller" ? false : true,
       log,
     };
-
-    // Filter by category — PAGE.categories has { catids, matchIds }
-    // catids: filter products from cache by product catid
-    // matchIds: filter API queries (when API works)
     if (PAGE.categories) {
       opts.categoryIds = PAGE.categories.matchIds || PAGE.categories;
       opts.catidFilter = PAGE.categories.catids || null;
     }
-
     const products = await shopeeAff.discoverProducts(usedIds, opts);
     if (products.length > 0) {
-      log(`   💰 ${products.length} sản phẩm có video + commission`);
+      log(`   💰 ${products.length} sản phẩm (${PAGE.strategy === "bestseller" ? "bestseller" : "random"})`);
       return products;
     }
-
-    // Fallback 1: same category without videoOnly filter
-    opts.videoOnly = false;
-    const all = await shopeeAff.discoverProducts(usedIds, opts);
-    const withVideo = all.filter(p => p.hasVideo);
-    if (withVideo.length > 0) {
-      log(`   ✅ Tìm thêm ${withVideo.length} SP có video (no videoOnly filter)`);
-      return withVideo;
-    }
-
-    // Fallback 2: no category filter (random products) — better than 0
-    if (PAGE.categories) {
-      log("   ⚠️ Không có SP cho category này, thử random...");
-      const randomProducts = await shopeeAff.discoverProducts(usedIds, {
-        categoriesPerRun: 4, productsPerCat: 4,
-        minCommission: 0, videoOnly: true, log,
-      });
-      if (randomProducts.length > 0) {
-        log(`   ✅ Fallback: ${randomProducts.length} SP random có video`);
-        return randomProducts;
-      }
-    }
-
-    log("   ⚠️ Không có SP nào có video");
+    log("   ⚠️ Không tìm thấy sản phẩm phù hợp");
   } catch (e) {
     log(`   ❌ Affiliate API lỗi: ${e.message?.slice(0, 80)}`);
   }
@@ -261,9 +236,16 @@ async function processVideo(rawPath, product) {
 import { createPoster } from "../social-poster.js";
 const poster = createPoster(PAGE);
 
-async function appendAffLink(caption, product) {
-  if (!product?.affiliateLink) return caption;
-  const shortLink = await shortenUrl(product.affiliateLink);
+function appendAffLink(caption, product) {
+  // Strict policy: only post products that have an official Shopee short link
+  // from the CSV export. The upfront partition at main flow ensures any
+  // product reaching here has a valid CSV link. If for some reason the CSV
+  // map changed between partition and post, we throw — fail loud.
+  const shortLink = getShortLinkFromCsv(product.itemId);
+  if (!shortLink) {
+    throw new Error(`Missing CSV short link for item ${product.itemId} — should have been filtered upfront`);
+  }
+  log(`   🔗 CSV short link: ${shortLink}`);
   return `${caption}\n\n🛒 Mua ngay: ${shortLink}`;
 }
 
@@ -271,7 +253,7 @@ async function postVideo(videoPath, caption, product, slotIdx) {
   const mediaRef = await poster.upload(videoPath);
   log(`   ✅ Uploaded: ${mediaRef.slice(0, 60)}`);
 
-  const captionWithLink = await appendAffLink(caption, product);
+  const captionWithLink = appendAffLink(caption, product);
   const delay = BASE_DELAY + slotIdx * POST_INTERVAL;
   const scheduledAt = new Date(Date.now() + delay * 60_000).toISOString().replace(/\.\d{3}Z$/, ".000Z");
   const results = {};
@@ -299,7 +281,9 @@ async function postVideo(videoPath, caption, product, slotIdx) {
 
   // Affiliate comment (PostFast only, 60 min after post)
   if (PAGE.postComments && product?.affiliateLink && results.fbPostId) {
-    const shortLink = await shortenUrl(product.affiliateLink);
+    // CSV-only: comment mirrors caption policy (no is.gd fallback)
+    const shortLink = getShortLinkFromCsv(product.itemId);
+    if (!shortLink) return results;  // skip comment if no CSV link (shouldn't happen — partitioned upfront)
     const comment = `MUA NGAY TẠI ĐÂY👇👇👇\n${shortLink}\n${shortLink}`;
     const commentDelay = 60 * 60_000;
     const timer = setTimeout(async () => {
@@ -342,8 +326,50 @@ if (!products.length) {
   process.exit(0);
 }
 
-const toProcess = products.slice(0, slot);
-log(`📌 Xử lý ${toProcess.length} sản phẩm\n`);
+// ── Partition: hasCsvLink + hasVideo ──────────────────────────────────────
+// Strict policy: only post products with official s.shopee.vn/xxx link from
+// CSV export. Products without CSV link are skipped and reported.
+// Also classify hasVideo so the Veo-hook branch is taken for no-video items.
+const partitioned = products.map(p => ({
+  product: p,
+  hasCsvLink: !!getShortLinkFromCsv(p.itemId),
+  hasVideo: !!p.videoUrl,
+}));
+
+const withLink = partitioned.filter(x => x.hasCsvLink).map(x => x.product);
+const withoutLink = partitioned.filter(x => !x.hasCsvLink).map(x => x.product);
+
+log(`\n📌 Top ${products.length} SP cho [${PAGE.name}]:`);
+partitioned.forEach((x, i) => {
+  const v = x.hasVideo ? "✅ video" : "⚠️ no-video → Veo hook";
+  const c = x.hasCsvLink ? "CSV ✅" : "CSV ❌ → SKIP";
+  log(`   [${i + 1}] "${(x.product.name || "").slice(0, 50)}" | sold ${x.product.sold || 0} | ${v} | ${c}`);
+});
+
+if (withoutLink.length > 0) {
+  log(`\n⚠️ ${withoutLink.length}/${products.length} sản phẩm CHƯA có CSV short link — sẽ skip:`);
+  for (const p of withoutLink) {
+    log(`   ⏭️  ${p.itemId} "${(p.name || "").slice(0, 60)}"`);
+  }
+}
+
+if (!withLink.length) {
+  log(`\n❌ 0 sản phẩm có CSV short link → không post được gì.`);
+  log(`   Hãy vào affiliate.shopee.vn → "Lấy link" cho các sản phẩm trên → export CSV vào D:/tiktok/`);
+  state.last_check = new Date().toISOString();
+  saveState(state);
+  process.exit(0);
+}
+
+const toProcess = withLink.slice(0, slot);
+log(`\n📌 Xử lý ${toProcess.length}/${withLink.length} sản phẩm có CSV link`);
+
+if (DRY_RUN) {
+  log(`\n🧪 DRY RUN — exiting before download/post`);
+  state.last_check = new Date().toISOString();
+  saveState(state);
+  process.exit(0);
+}
 
 // Check if page has a valid posting account configured
 if (!poster.getFacebookId() && !poster.getTikTokId()) {
@@ -363,15 +389,35 @@ for (let i = 0; i < toProcess.length; i++) {
   log(`   💰 ${p.commissionRate}% | ${p.price?.toLocaleString("vi")}đ | Bán: ${p.sold}`);
 
   state.processed_ids = [...state.processed_ids, p.itemId].slice(-500);
-  state.used_shopee_ids = [...state.used_shopee_ids, p.itemId].slice(-500);
+  state.used_shopee_ids = [...new Set([...state.used_shopee_ids, p.itemId])];  // lifetime per-page dedup, never truncate
   saveState(state);
 
   try {
-    const raw = await downloadVideo(p);
-    if (!raw) continue;
+    let processed;
+    let isVeoHook = false;
+    let veoTier = null;
 
-    const processed = await processVideo(raw, p);
-    if (!processed) continue;
+    if (p.hasVideo && p.videoUrl) {
+      // Existing flow: download + FFmpeg
+      const raw = await downloadVideo(p);
+      if (!raw) continue;
+      processed = await processVideo(raw, p);
+      if (!processed) continue;
+    } else {
+      // New flow: Veo hook from product images
+      const { generateVeoHookVideo } = await import("./veo_hook.mjs");
+      const hookOut = join(OUTPUT_DIR, `${p.itemId}_hook.mp4`);
+      const cfg = PAGE.veoHookConfig || { style: "urgent", targetDuration: 60 };
+      try {
+        const r = await generateVeoHookVideo(p, hookOut, { style: cfg.style, log });
+        processed = r.path;
+        veoTier = r.veoTier;
+        isVeoHook = true;
+      } catch (e) {
+        log(`   ❌ Veo hook failed: ${e.message?.slice(0, 120)} — skip`);
+        continue;
+      }
+    }
 
     const { platform, niche, pageName } = PAGE.caption;
     const caption =
@@ -379,13 +425,17 @@ for (let i = 0; i < toProcess.length; i++) {
       || genCaptionFallback(p.name, pageName, niche);
     log(`   📝 "${caption.slice(0, 80)}..."`);
 
-    const result = await postVideo(processed, caption, p, doneToday + success);
+    const result = await postVideo(processed, caption, p, success);
+    result.isVeoHook = isVeoHook;
+    result.veoTier = veoTier;
 
     state.posts_today.push({
       ...result,
       shopeeItemId: p.itemId,
       productName: p.name?.slice(0, 100),
       affiliateLink: p.affiliateLink || null,
+      isVeoHook,
+      veoTier,
       at: new Date().toISOString(),
     });
     saveState(state);
@@ -404,8 +454,34 @@ state.last_check = new Date().toISOString();
 saveState(state);
 
 log("\n" + "=".repeat(60));
-log(`✅ Đăng ${success}/${toProcess.length} video | Page: ${PAGE.name}`);
+log(`✅ Page: ${PAGE.name}`);
+log(`   Posted ${success}/${toProcess.length} videos`);
+for (const post of state.posts_today.slice(-success)) {
+  const tag = post.isVeoHook ? `[Veo hook tier=${post.veoTier || "kenburns"}]` : `[video gốc]`;
+  log(`   - ${tag.padEnd(28)} ${post.productName?.slice(0, 50) || post.shopeeItemId} | fb=${post.fbPostId || "-"}`);
+}
+
+if (withoutLink.length > 0) {
+  log("");
+  log("─".repeat(60));
+  log(`⚠️  ${withoutLink.length} SP CẦN CSV short link (export thủ công):`);
+  for (const p of withoutLink) {
+    log(`   - ${p.itemId}  "${(p.name || "").slice(0, 60)}"`);
+  }
+  log(`Bước: affiliate.shopee.vn → "Lấy link" → export CSV → drop vào D:/tiktok/`);
+  log("─".repeat(60));
+}
+
+// Veo quota snapshot
+try {
+  const veoMod = await import("../veo.js");
+  const counts = veoMod.pickAvailableModel ? "(see [Veo] log lines above for usage)" : "";
+  log(`📊 Veo quota: ${counts}`);
+} catch {}
+
+log(`📊 Tổng đã post lifetime: ${state.used_shopee_ids.length} SP`);
 log(`📊 Tổng hôm nay: ${doneToday + success}/${MAX_PER_DAY}`);
+log("=".repeat(60));
 
 // Cleanup raw files > 3 days
 const cutoff = Date.now() - 3 * 24 * 3600_000;

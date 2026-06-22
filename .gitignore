@@ -36,3 +36,6 @@ backup_code/
 
 # Rừng Xì Tin generated output (videos, audio, intermediate assets)
 vung/output/
+
+# ffmpeg binary (204MB, installed per-machine, do not commit)
+bin/

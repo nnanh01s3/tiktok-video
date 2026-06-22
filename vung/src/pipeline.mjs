@@ -39,6 +39,7 @@ const dryRun = flag("--dry-run");
 const skipRender = flag("--skip-render");
 const skipCompose = flag("--skip-compose");
 const onlyScenes = arg("--only-scenes"); // "1,3,5" or "1-5"
+const skipVeo = flag("--skip-veo");
 
 if (!episodeArg) {
   console.error(
@@ -47,7 +48,8 @@ if (!episodeArg) {
     "  --dry-run          Parse + validate only, no generation\n" +
     "  --only-scenes N,M  Render only specific scenes (e.g., 1,2,3 or 1-5)\n" +
     "  --skip-render      Skip scene rendering (assets must exist)\n" +
-    "  --skip-compose     Skip final video composition"
+    "  --skip-compose     Skip final video composition\n" +
+    "  --skip-veo        Skip Veo video generation (image-only, for testing)"
   );
   process.exit(1);
 }
@@ -150,7 +152,7 @@ async function main() {
     for (const scene of scenesToRender) {
       console.log(`─── Scene ${scene.id}/${episode.scenes.length}: ${scene.title} ───`);
       try {
-        const result = await renderScene(scene, outputDir);
+        const result = await renderScene(scene, outputDir, { skipVeo });
         rendered.push({ scene, ...result });
       } catch (err) {
         console.error(`[Pipeline] Scene ${scene.id} failed: ${err.message}`);

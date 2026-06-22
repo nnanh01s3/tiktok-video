@@ -37,6 +37,7 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const STEP = process.argv.find((a) => a.startsWith("--step="))?.split("=")[1];
 const CATEGORY = process.argv.find((a) => a.startsWith("--category="))?.split("=")[1];
 const VEO_MODEL = process.argv.find((a) => a.startsWith("--veo="))?.split("=")[1] || "fast";
+const DELAY_MIN = parseInt(process.argv.find((a) => a.startsWith("--delay="))?.split("=")[1] || "1", 10);
 
 const QUEUE_DIR = process.env.QUEUE_DIR || "./queue";
 const NICHE = "quotes";
@@ -51,17 +52,36 @@ const DEFAULT_HASHTAGS = {
   niche_small: ["#caungoncuocsong", "#trietlysong", "#phattrienbantan", "#tuduytichcuc", "#ngontinh"],
 };
 
+// Synced 27/4/2026 to match actual quotes_v2 categories in DB.
+// Previously labels were aspirational (e.g. "thành công và tham vọng") but
+// quotes_v2 only contains "triết lý sống / trí tuệ / tự do / nghị lực / ...".
+// Result: 9/10 picks fell through getUnusedQuotes fallback, picking from
+// "triết lý sống" pool. Now 1:1 mapping → category log = reality.
+//
+// Quote inventory per category (as of 27/4):
+//   triết lý sống (91), trí tuệ (31), tự do (18), nghị lực (17),
+//   tình yêu (16), lãnh đạo (14), nhân sinh (13),
+//   tâm linh (2), nhân nghĩa (1), kiêu hãnh (1)
+// Sparse categories (≤2 quotes) will exhaust fast → fall back to general
+// pool. Future plan: seed more quotes for sparse categories (option B).
+// Order matters: dayOfYear % CATEGORIES.length picks index. Today
+// (27/4/2026, day 117) → index 7. To put HEALTHY categories at indices
+// 7-9 (today + next 2 days), sparse categories shift to indices 0-2.
+// Cycle: 7 healthy days (D 0-6) then 3 sparse days (D 7-9), then repeat.
+//
+// If sparse categories get seeded later (option B task), reorder again
+// or restore inventory-desc order.
 const CATEGORIES = [
-  "thành công và tham vọng",
-  "kỷ luật và thói quen",
-  "sức mạnh tinh thần",
-  "vượt qua thất bại",
-  "phát triển bản thân",
-  "triết lý sống",
-  "tư duy tài chính",
-  "lãnh đạo và ảnh hưởng",
-  "quản lý thời gian",
-  "trí tuệ cảm xúc",
+  "tâm linh",      // idx 0 — sparse (2 quotes), fallback expected
+  "nhân nghĩa",    // idx 1 — exhausted (1 quote)
+  "kiêu hãnh",     // idx 2 — exhausted (1 quote)
+  "triết lý sống", // idx 3 — healthy 91
+  "trí tuệ",       // idx 4 — healthy 31
+  "tự do",         // idx 5 — healthy 18
+  "nghị lực",      // idx 6 — healthy 17
+  "tình yêu",      // idx 7 — healthy 16  ← today (D 117 % 10)
+  "lãnh đạo",      // idx 8 — healthy 14  ← tomorrow
+  "nhân sinh",     // idx 9 — healthy 13  ← D+2
 ];
 
 function log(msg) {
@@ -69,9 +89,17 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
+// Day-of-year rotation: same category 1 day, then advances. 10-day cycle.
+// Predictable rotation > random — user knows what tomorrow will be.
+// Override with --category="..." to force specific category.
+//
+// Same pattern as reels-config.mjs:pickSource() for consistency.
 function pickCategory() {
   if (CATEGORY) return CATEGORY;
-  return CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+  );
+  return CATEGORIES[dayOfYear % CATEGORIES.length];
 }
 
 function pickHashtags() {
@@ -722,12 +750,17 @@ export async function runPipeline(opts = {}) {
     log(`  Imagen + Ken Burns clip ${i + 1}/${quotes.length}...`);
     const imgPath = `${QUEUE_DIR}/${jobId}-img-${i}.png`;
 
-    // Adapt Veo prompt for still image
+    // Adapt Veo prompt for still image.
+    // Brightness: "bright cinematic lighting, warm tones, well-lit" instead
+    // of generic "cinematic lighting" — Imagen interprets "cinematic" as
+    // moody/dramatic by default, producing dark scenes. Explicit brightness
+    // keywords keep the mood inspirational/uplifting per user feedback.
     const imgPrompt = scenePrompts[i]
       .replace(/^Vertical 9:16 video\.\s*/i, "")
       .replace(/No text, no people talking\.\s*/i, "")
       .replace(/Cinematic, smooth camera movement\.\s*/i, "")
-      + " Vertical 9:16 aspect ratio. Ultra high quality, cinematic lighting, 4K detail.";
+      + " Vertical 9:16 aspect ratio. Ultra high quality, " +
+      "bright cinematic lighting, warm natural tones, well-lit, vibrant, 4K detail.";
 
     await generateImage(imgPrompt, imgPath);
 
@@ -838,7 +871,7 @@ export async function runPipeline(opts = {}) {
     : "";
 
   const caption = `${scriptResult.caption}${authorCredits}\n\n${hashtags.join(" ")}`;
-  const scheduledAt = new Date(Date.now() + 60_000).toISOString();
+  const scheduledAt = new Date(Date.now() + DELAY_MIN * 60_000).toISOString();
 
   const postResult = await quotePoster.scheduleTikTok({
     mediaRef,

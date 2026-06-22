@@ -24,40 +24,73 @@ const ROOT = join(__dirname, "..");
 
 // ── CLI args ──────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
+function arg(name, fallback = null) {
+  const i = args.indexOf(name);
+  return i >= 0 && i + 1 < args.length ? args[i + 1] : fallback;
+}
 const FB_ONLY = args.includes("--fb-only");
 const TT_ONLY = args.includes("--tt-only");
 const SKIP_CACHE = args.includes("--skip-cache");
+
+// ── Absolute scheduling ─────────────────────────────────────────────────
+// Usage: node src/daily.mjs --schedule-at 18:00 --schedule-end 18:45
+//   → schedules FB videos evenly between 18:00 and 18:45 (VN local time)
+//   Without these flags, videos are scheduled immediately with short delays.
+const SCHEDULE_AT = arg("--schedule-at");   // "HH:MM" local time
+const SCHEDULE_END = arg("--schedule-end"); // "HH:MM" local time (default: +45min)
+
+function minutesUntil(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(h, m || 0, 0, 0);
+  if (target <= now) target.setDate(target.getDate() + 1);
+  return Math.max(0, Math.round((target - now) / 60000));
+}
 
 // ── Config ────────────────────────────────────────────────────────────────
 const CACHE_FILE = join(ROOT, "data/shopee/products_cache.json");
 const CACHE_MAX_AGE = 4 * 60 * 60 * 1000; // 4 hours
 
-// Delays compressed from spread-40-min to max-15-min window per user request.
-// Each script posts 2 videos at `delay` and `delay + POST_INTERVAL` minutes.
-// With POST_INTERVAL=2 in reup.mjs + fb_repost.mjs, final scheduled times:
-//   shopee     :  0,  2
-//   gia_dung   :  2,  4
-//   tech       :  4,  6
-//   sac_dep    :  6,  8
-//   thoi_trang :  8, 10
-//   me_be      : 10, 12
-//   the_thao   : 11, 13  (tighter 1-min gap from here — 18 videos / 15 min slot)
-//   bach_hoa   : 12, 14
-//   fb_repost  : 13, 15
-// Total: 18 Facebook videos spread across a 0–15 minute window.
-const FB_SCRIPTS = [
-  // ── 8 FB pages (all PostForMe) ──
-  { name: "shopee",     cmd: ["src/shopee/reup.mjs", "--page", "shopee", "--delay", "0"] },
-  { name: "gia_dung",   cmd: ["src/shopee/reup.mjs", "--page", "gia_dung", "--delay", "2"] },
-  { name: "tech",       cmd: ["src/shopee/reup.mjs", "--page", "tech", "--delay", "4"] },
-  { name: "sac_dep",    cmd: ["src/shopee/reup.mjs", "--page", "sac_dep", "--delay", "6"] },
-  { name: "thoi_trang", cmd: ["src/shopee/reup.mjs", "--page", "thoi_trang", "--delay", "8"] },
-  { name: "me_be",      cmd: ["src/shopee/reup.mjs", "--page", "me_be", "--delay", "10"] },
-  { name: "the_thao",   cmd: ["src/shopee/reup.mjs", "--page", "the_thao", "--delay", "11"] },
-  { name: "bach_hoa",   cmd: ["src/shopee/reup.mjs", "--page", "bach_hoa", "--delay", "12"] },
-  // ── FB repost ──
-  { name: "fb_repost",  cmd: ["src/shopee/fb_repost.mjs", "--max", "2", "--delay", "13"] },
+// Each script posts 1 video per run (MAX_PER_RUN=1 in config.mjs).
+// 9 FB scripts total (8 shop pages + 1 fb_repost from Đồ Độc Lạ).
+//
+// Scheduling modes:
+//   --schedule-at 18:00 --schedule-end 18:45
+//     → absolute: videos land at 18:00, 18:05, 18:10, ..., 18:40 VN time
+//     → stagger auto-computed: window / (N-1)
+//   No flags → immediate: 0-12 min from now (legacy behavior)
+const FB_SCRIPT_DEFS = [
+  { name: "shopee",     base: ["src/shopee/reup.mjs", "--page", "shopee"] },
+  { name: "gia_dung",   base: ["src/shopee/reup.mjs", "--page", "gia_dung"] },
+  { name: "tech",       base: ["src/shopee/reup.mjs", "--page", "tech"] },
+  { name: "sac_dep",    base: ["src/shopee/reup.mjs", "--page", "sac_dep"] },
+  { name: "thoi_trang", base: ["src/shopee/reup.mjs", "--page", "thoi_trang"] },
+  { name: "me_be",      base: ["src/shopee/reup.mjs", "--page", "me_be"] },
+  { name: "the_thao",   base: ["src/shopee/reup.mjs", "--page", "the_thao"] },
+  { name: "bach_hoa",   base: ["src/shopee/reup.mjs", "--page", "bach_hoa"] },
+  { name: "fb_repost",  base: ["src/shopee/fb_repost.mjs", "--max", "1"] },
 ];
+
+const IMMEDIATE_STAGGERS = [0, 2, 3, 4, 5, 7, 8, 10, 12];
+
+const FB_SCRIPTS = (() => {
+  const n = FB_SCRIPT_DEFS.length;
+  if (SCHEDULE_AT) {
+    const baseDelay = minutesUntil(SCHEDULE_AT);
+    const endDelay = SCHEDULE_END ? minutesUntil(SCHEDULE_END) : baseDelay + 45;
+    const window = endDelay - baseDelay;
+    const stagger = n > 1 ? window / (n - 1) : 0;
+    return FB_SCRIPT_DEFS.map((def, i) => ({
+      name: def.name,
+      cmd: [...def.base, "--delay", String(Math.round(baseDelay + i * stagger))],
+    }));
+  }
+  return FB_SCRIPT_DEFS.map((def, i) => ({
+    name: def.name,
+    cmd: [...def.base, "--delay", String(IMMEDIATE_STAGGERS[i] || 0)],
+  }));
+})();
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function ts() {
@@ -140,8 +173,14 @@ async function main() {
 
   // ── Step 1: TikTok Veo Pipeline (song song với FB) ──
   if (!FB_ONLY) {
-    log("🎬 [TikTok] Starting Veo pipeline...");
-    const ttTask = runScript("tiktok", ["src/pipeline-quotes-veo.js"], {
+    // TikTok delay: place it in the middle of the schedule window so it
+    // doesn't always be the first or last post. With 9 FB scripts, TikTok
+    // gets the slot right after the 5th FB page (~halfway through window).
+    const ttDelayMin = SCHEDULE_AT
+      ? Math.round(minutesUntil(SCHEDULE_AT) + (SCHEDULE_END ? (minutesUntil(SCHEDULE_END) - minutesUntil(SCHEDULE_AT)) / 2 : 22))
+      : 1; // immediate mode: 1 min
+    log(`🎬 [TikTok] Starting Veo pipeline... (schedule delay=${ttDelayMin}m)`);
+    const ttTask = runScript("tiktok", ["src/pipeline-quotes-veo.js", `--delay=${ttDelayMin}`], {
       prefix: "[TT] ",
     }).then((r) => {
       const ok = r.code === 0;

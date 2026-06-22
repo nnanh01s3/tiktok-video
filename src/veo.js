@@ -16,24 +16,33 @@
  *   - veo-3.1-generate-preview: Best quality + native audio ("premium")
  *
  * Cost per 8s video: Veo 2.0 ~free, Veo 3.0-fast ~$1.20, Veo 3.1 ~$3.20
- * Rate limits: 2 uses/model/day. Videos retained 2 days.
+ * Rate limits: fast 10/day, standard 3/day, premium 2/day. Videos retained 2 days.
  */
 import { GoogleGenAI } from "@google/genai";
-import { writeFileSync, existsSync, mkdirSync } from "fs";
+import { writeFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname } from "path";
 
 const POLL_INTERVAL_MS = 10_000; // 10 seconds between status checks
 const MAX_POLL_ATTEMPTS = 60;    // 10 minutes max wait
-const MAX_USES_PER_MODEL_PER_DAY = 2;
+const MAX_USES_PER_MODEL = {
+  fast: 10,      // Veo 2.0 free tier — no audio, no lip-sync
+  lite: 20,     // Veo 3.1 Lite — native audio + lip-sync, ~$0.15/clip (cheap!)
+  standard: 3,   // Veo 3.0-fast (~$1.20/clip)
+  premium: 2,    // Veo 3.1 full (~$3.20/clip) — quotes pipeline
+};
 
 const MODELS = {
-  fast: "veo-2.0-generate-001",          // Free tier / cheapest — default
-  standard: "veo-3.0-fast-generate-001", // Mid-tier (~$0.15/s)
-  premium: "veo-3.1-generate-preview",   // Best quality + native audio (~$0.40/s)
+  fast: "veo-2.0-generate-001",          // Free tier — text+image to video, no audio
+  lite: "veo-3.1-lite-generate-preview", // Veo 3.1 Lite — native audio + lip-sync, cheapest paid
+  standard: "veo-3.0-fast-generate-001", // Veo 3.0 fast — native audio
+  premium: "veo-3.1-generate-preview",   // Best quality + native audio
 };
 
 // Priority order: cheapest first — always prefer lower cost
-const MODEL_PRIORITY = ["fast", "standard", "premium"];
+// Priority for pickAvailableModel(): cheapest viable first.
+// fast (free) is cheapest but no audio — only useful when caller doesn't need lip-sync.
+// lite ($0.15/clip) is cheapest with native audio + lip-sync.
+const MODEL_PRIORITY = ["fast", "lite", "standard", "premium"];
 
 // Track daily usage per model: { "2026-03-29": { fast: 1, standard: 0, premium: 0 } }
 let _dailyUsage = { date: "", counts: {} };
@@ -59,20 +68,21 @@ export function pickAvailableModel() {
   const counts = getTodayUsage();
   for (const key of MODEL_PRIORITY) {
     const used = counts[key] || 0;
-    if (used < MAX_USES_PER_MODEL_PER_DAY) {
-      return key;
-    }
+    const max = MAX_USES_PER_MODEL[key] || 0;
+    if (used < max) return key;
   }
   return null; // All models exhausted
 }
 
-// Scene prompt templates by mood — appended to quote-specific prompts
+// Scene prompt templates by mood — appended to quote-specific prompts.
+// Brightness tuned slightly up per user feedback (Option A: keep cinematic
+// feel, just nudge lighting keywords toward brighter/warmer tones).
 const SCENE_STYLES = {
-  epic: "cinematic lighting, dramatic clouds, golden hour, slow camera movement, 4K film grain",
-  calm: "soft natural light, gentle breeze, serene atmosphere, smooth slow-motion, shallow depth of field",
-  dark: "moody lighting, rain, neon reflections, urban night scene, atmospheric fog",
-  nature: "lush green landscape, flowing water, morning mist, birds in flight, organic movement",
-  abstract: "flowing particles, cosmic nebula colors, abstract light trails, ethereal atmosphere",
+  epic: "bright cinematic lighting, luminous golden hour, warm sunbeams piercing clouds, slow camera movement, 4K film grain",
+  calm: "bright soft natural light, gentle breeze, serene airy atmosphere, smooth slow-motion, shallow depth of field",
+  dark: "twilight with warm ambient glow, soft rain with neon reflections, dusk city scene with street lamps, atmospheric haze",
+  nature: "sunlit lush landscape, flowing water catching light, bright morning mist, birds in flight, organic movement",
+  abstract: "bright flowing particles, warm cosmic colors, luminous light trails, ethereal glowing atmosphere",
 };
 
 let _client;
@@ -113,7 +123,26 @@ export async function generateVideo(prompt, outputPath, options = {}) {
     config.resolution = options.resolution || "1080p";
   }
 
-  let operation = await ai.models.generateVideos({ model, prompt, config });
+  // Image-to-video: read file, base64-encode, attach to payload.
+  // Both Veo 2.0 and Veo 3.x accept this via the GenAI SDK.
+  const apiPayload = { model, prompt, config };
+  if (options.image) {
+    if (!existsSync(options.image)) {
+      throw new Error(`[Veo] Image not found: ${options.image}`);
+    }
+    const imgBytes = readFileSync(options.image);
+    const lower = options.image.toLowerCase();
+    const extMap = { ".png": "png", ".webp": "webp", ".jpg": "jpeg", ".jpeg": "jpeg" };
+    const rawExt = lower.match(/\.[^.]+$/)?.[0] ?? "";
+    const mimeSubtype = extMap[rawExt] ?? "jpeg";
+    apiPayload.image = {
+      imageBytes: imgBytes.toString("base64"),
+      mimeType: `image/${mimeSubtype}`,
+    };
+    console.log(`[Veo] Reference image: ${options.image}`);
+  }
+
+  let operation = await ai.models.generateVideos(apiPayload);
 
   // Poll until done
   let attempts = 0;
@@ -142,7 +171,7 @@ export async function generateVideo(prompt, outputPath, options = {}) {
   console.log(`[Veo] Video saved: ${outputPath}`);
   recordModelUse(modelKey);
   const counts = getTodayUsage();
-  console.log(`[Veo] Daily usage: ${MODEL_PRIORITY.map(k => `${k}=${counts[k] || 0}/${MAX_USES_PER_MODEL_PER_DAY}`).join(", ")}`);
+  console.log(`[Veo] Daily usage: ${MODEL_PRIORITY.map(k => `${k}=${counts[k] || 0}/${MAX_USES_PER_MODEL[k] || 0}`).join(", ")}`);
   return {
     path: outputPath,
     duration: 8,
@@ -204,4 +233,4 @@ function pickRandomStyle() {
   return styles[Math.floor(Math.random() * styles.length)];
 }
 
-export { MODELS, SCENE_STYLES, MODEL_PRIORITY };
+export { MODELS, SCENE_STYLES, MODEL_PRIORITY, MAX_USES_PER_MODEL };

@@ -342,6 +342,7 @@ function parseProduct(item, categoryName = "") {
     videoThumb,       // Thumbnail URL
     hasVideo: !!videoUrl,
     source: "shopee_affiliate_dashboard",
+    _raw: item,  // for veo_hook image extraction
   };
 }
 
@@ -446,6 +447,7 @@ export class ShopeeAffiliate {
   async discoverProducts(
     usedIds = [],
     {
+      strategy = "random",        // "random" (default, legacy) | "bestseller"
       categoriesPerRun = 3,
       productsPerCat = 3,
       minCommission = 0,
@@ -475,16 +477,32 @@ export class ShopeeAffiliate {
       const products = cache.products
         .filter(matchesCategory)
         .map(item => parseProduct(item, "cache"));
-      allProducts = products.filter(
+
+      const filtered = products.filter(
         p => !usedIds.includes(p.itemId) &&
              p.affiliateLink &&
              p.commissionRate >= minCommission &&
              (!videoOnly || p.hasVideo)
-      ).sort(() => Math.random() - 0.5).slice(0, categoriesPerRun * productsPerCat);
+      );
+
+      if (strategy === "bestseller") {
+        // Sort by historical_sold DESC, tiebreak by commissionRate DESC
+        allProducts = filtered
+          .sort((a, b) =>
+            ((b.sold || 0) - (a.sold || 0)) ||
+            ((b.commissionRate || 0) - (a.commissionRate || 0))
+          )
+          .slice(0, productsPerCat);
+      } else {
+        // Legacy: random shuffle, larger slice
+        allProducts = filtered
+          .sort(() => Math.random() - 0.5)
+          .slice(0, categoriesPerRun * productsPerCat);
+      }
       usedCache = true;
 
       if (categoryIds) {
-        log(`   🏷️ Filtered by categories: [${categoryIds.join(", ")}] → ${allProducts.length} products`);
+        log(`   🏷️ Filtered by categories: [${categoryIds.join(", ")}] → ${allProducts.length} products (strategy=${strategy})`);
       }
     }
 
@@ -493,7 +511,7 @@ export class ShopeeAffiliate {
       let apiError = null;
       try {
         if (!this.isReady()) throw new Error("no cookies");
-        allProducts = await this._fetchFromApi({ usedIds, categoriesPerRun, productsPerCat, minCommission, videoOnly, categoryIds, log });
+        allProducts = await this._fetchFromApi({ strategy, usedIds, categoriesPerRun, productsPerCat, minCommission, videoOnly, categoryIds, log });
       } catch (e) {
         apiError = e;
       }
@@ -510,12 +528,24 @@ export class ShopeeAffiliate {
             return cid ? catidSet2.has(Number(cid)) : false;
           };
           const products = staleCache.products.filter(matchesCat).map(item => parseProduct(item, "cache-stale"));
-          allProducts = products.filter(
+          const filtered = products.filter(
             p => !usedIds.includes(p.itemId) && p.affiliateLink &&
                  p.commissionRate >= minCommission && (!videoOnly || p.hasVideo)
-          ).sort(() => Math.random() - 0.5).slice(0, categoriesPerRun * productsPerCat);
+          );
+          if (strategy === "bestseller") {
+            allProducts = filtered
+              .sort((a, b) =>
+                ((b.sold || 0) - (a.sold || 0)) ||
+                ((b.commissionRate || 0) - (a.commissionRate || 0))
+              )
+              .slice(0, productsPerCat);
+          } else {
+            allProducts = filtered
+              .sort(() => Math.random() - 0.5)
+              .slice(0, categoriesPerRun * productsPerCat);
+          }
           if (allProducts.length > 0) {
-            log(`   ✅ Stale cache: ${allProducts.length} SP`);
+            log(`   ✅ Stale cache: ${allProducts.length} SP (strategy=${strategy})`);
           }
         } else {
           log("❌ API fail + không có cache, 0 sản phẩm.");
@@ -528,7 +558,7 @@ export class ShopeeAffiliate {
   }
 
   /** @private Fetch products from live API */
-  async _fetchFromApi({ usedIds, categoriesPerRun, productsPerCat, minCommission, videoOnly, categoryIds, log }) {
+  async _fetchFromApi({ strategy = "random", usedIds, categoriesPerRun, productsPerCat, minCommission, videoOnly, categoryIds, log }) {
     log("🛒 Tìm sản phẩm qua Shopee Affiliate Dashboard API...");
     const allProducts = [];
 
@@ -561,7 +591,10 @@ export class ShopeeAffiliate {
             p => !usedIds.includes(p.itemId) && p.affiliateLink &&
                  p.commissionRate >= minCommission && (!videoOnly || p.hasVideo)
           );
-          const picked = fresh.slice(0, productsPerCat);
+          // For bestseller, push the full filtered pool so the final sort sees
+          // every eligible item across sources. For random, keep the per-source
+          // cap (legacy behavior — distributes randomness).
+          const picked = strategy === "bestseller" ? fresh : fresh.slice(0, productsPerCat);
           const withVideo = result.products.filter(p => p.hasVideo).length;
           log(`   ✅ ${result.products.length} SP (${withVideo} có video), ${picked.length} mới`);
           allProducts.push(...picked);
@@ -572,6 +605,13 @@ export class ShopeeAffiliate {
       await new Promise(r => setTimeout(r, 1000));
     }
 
+    if (strategy === "bestseller") {
+      allProducts.sort((a, b) =>
+        ((b.sold || 0) - (a.sold || 0)) ||
+        ((b.commissionRate || 0) - (a.commissionRate || 0))
+      );
+      return allProducts.slice(0, productsPerCat);
+    }
     return allProducts;
   }
 }

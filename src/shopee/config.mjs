@@ -31,6 +31,13 @@ export const SHOPEE_CATEGORIES = {
   bach_hoa:    { catids: [100001, 100629, 100639],   matchIds: [100639, 100017] },
 };
 
+// veoHookConfig (consumed by src/shopee/veo_hook.mjs):
+//   style: "urgent" | "elegant" | "playful"
+//     — drives Claude prompt tone and TTS voice selection
+//   targetDuration: number (seconds)
+//     — floor for the composed video; compose targets 60–70s total
+//       (8s Veo hook + Ken Burns slideshow + detail crops)
+
 // ── Page Configs — ALL PostForMe ──────────────────────────────────────────
 export const PAGES = {
   shopee: {
@@ -40,6 +47,9 @@ export const PAGES = {
     categories: null,
     caption: { platform: "facebook", niche: "đồ lạ Shopee", pageName: "Sưu Tầm Hàng Dị" },
     postComments: false,
+    topic: "Đồ độc lạ, gadget thú vị, dụng cụ sáng tạo, phát minh tiện ích, unboxing sản phẩm không phổ biến. Bao gồm: mẹo vặt với dụng cụ, demo sản phẩm mới. KHÔNG bao gồm: game show, challenge trẻ em, trivia địa lý/lịch sử, vlog cá nhân.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "playful", targetDuration: 60 },
   },
 
   gia_dung: {
@@ -49,6 +59,9 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.gia_dung,
     caption: { platform: "facebook", niche: "đồ gia dụng thông minh Shopee", pageName: "Đồ Gia Dụng" },
     postComments: false,
+    topic: "Đồ gia dụng, thiết bị nhà bếp, nồi chiên không dầu, máy xay, smart home, camera giám sát, mẹo dọn dẹp, tips làm bếp, organize tủ lạnh, dọn nhà. KHÔNG bao gồm: review điện thoại, vlog gia đình, content trẻ em thuần.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "urgent", targetDuration: 60 },
   },
 
   tech: {
@@ -58,6 +71,9 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.cong_nghe,
     caption: { platform: "facebook", niche: "công nghệ điện tử Shopee", pageName: "Đồ Công Nghệ Giá Tốt" },
     postComments: false,
+    topic: "Review điện thoại, laptop, tai nghe, smartwatch, camera, app công nghệ, so sánh spec, unboxing gadget, thủ thuật iOS/Android. KHÔNG bao gồm: game show đoán đồ/đoán người, trivia địa lý/lịch sử, challenge giải trí, lắc chai nước.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "urgent", targetDuration: 60 },
   },
 
   sac_dep: {
@@ -67,6 +83,9 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.sac_dep,
     caption: { platform: "facebook", niche: "mỹ phẩm làm đẹp Shopee", pageName: "Mỹ Phẩm Giá Tốt" },
     postComments: false,
+    topic: "Skincare, mỹ phẩm, routine dưỡng da, makeup tutorial, review sản phẩm làm đẹp, son môi, kem chống nắng, serum, retinol, livestream sale mỹ phẩm. KHÔNG bao gồm: thời trang outfit, gadget, ẩm thực.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "elegant", targetDuration: 60 },
   },
 
   thoi_trang: {
@@ -76,6 +95,9 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.thoi_trang,
     caption: { platform: "facebook", niche: "thời trang phụ kiện Shopee", pageName: "Thời Trang & Phụ Kiện" },
     postComments: false,
+    topic: "OOTD, outfit styling, phối đồ, xu hướng thời trang, try-on haul, phụ kiện (túi, giày, trang sức), street style, diễn show. KHÔNG bao gồm: challenge lắc chai, game trẻ em, gia đình vlog thuần, skincare.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "elegant", targetDuration: 60 },
   },
 
   me_be: {
@@ -85,6 +107,9 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.me_be,
     caption: { platform: "facebook", niche: "đồ mẹ và bé Shopee", pageName: "Mẹ & Bé Thông Minh" },
     postComments: false,
+    topic: "Chăm con, mẹ bỉm sữa, review đồ mẹ & bé (bỉm, sữa, xe đẩy), tips nuôi con, dạy con học, vlog gia đình có trẻ nhỏ, review sách thiếu nhi. KHÔNG bao gồm: content người lớn, tech review, outfit adult.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "elegant", targetDuration: 60 },
   },
 
   the_thao: {
@@ -94,6 +119,9 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.the_thao,
     caption: { platform: "facebook", niche: "đồ thể thao outdoor Shopee", pageName: "Thể Thao & Outdoor" },
     postComments: false,
+    topic: "Tập gym, workout tại nhà, yoga, cardio, kỹ thuật tập tạ, transformation trước-sau, tips giảm cân, fitness outdoor, chạy bộ, đồ tập, bóng đá (freestyle, kỹ thuật, skill challenge, bóng đá phủi, futsal, tâng bóng). KHÔNG bao gồm: bóng ma hạnh phúc (trend), dance cover, vlog ăn uống thuần, highlight trận đấu bản quyền truyền hình.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "urgent", targetDuration: 60 },
   },
 
   bach_hoa: {
@@ -103,6 +131,9 @@ export const PAGES = {
     categories: SHOPEE_CATEGORIES.bach_hoa,
     caption: { platform: "facebook", niche: "bách hóa sách hay Shopee", pageName: "Bách Hóa & Sách Hay" },
     postComments: false,
+    topic: "Tin tức đời sống, tips tiêu dùng, review sản phẩm thiết yếu, sách hay nên đọc, mẹo học tập, trending social, kinh tế - giá cả. KHÔNG bao gồm: nội dung nhạy cảm (drama tình cảm, chính trị cực đoan), adult content.",
+    strategy: "bestseller",
+    veoHookConfig: { style: "playful", targetDuration: 60 },
   },
 };
 
@@ -129,6 +160,6 @@ export const TRENDING_CONFIG = {
 export const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 export const FFPROBE = process.env.FFPROBE_PATH || "ffprobe";
 export const FONT = process.env.FONT_PATH || "C:/Windows/Fonts/arial.ttf";
-export const BASE_DIR = "D:/tiktok/data/shopee";
+export const BASE_DIR = process.env.BASE_DIR || "D:/tiktok/data/shopee";
 export const MAX_PER_DAY = 12;
-export const MAX_PER_RUN = 2;
+export const MAX_PER_RUN = 1; // 1 video per page per daily run (was 2)

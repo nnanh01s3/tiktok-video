@@ -7,15 +7,17 @@
     "start": "node src/index.js",
     "seed": "node scripts/seed-quotes.js",
     "test:pipeline": "node src/pipeline-quotes-veo.js --dry-run",
-    "test:db": "node scripts/verify-db.js"
+    "test:db": "node scripts/verify-db.js",
+    "test:douyin": "node --test test/douyin/state.test.mjs test/douyin/parseViewCount.test.mjs test/douyin/srt.test.mjs test/douyin/jaccard.test.mjs test/douyin/extract-subs-dedup.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@google/genai": "^1.46.0",
     "better-sqlite3": "^11.7.0",
     "dotenv": "^16.4.7",
-    "msedge-tts": "^2.0.4",
     "luxon": "^3.5.0",
-    "node-cron": "^3.0.3"
+    "msedge-tts": "^2.0.4",
+    "node-cron": "^3.0.3",
+    "ws": "^8.21.0"
   }
 }

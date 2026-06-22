@@ -93,7 +93,7 @@ function parseTimeRange(line) {
 // v2 (one combined H1 line):
 //   # 🎬 RỪNG XÌ TIN - TẬP 1: QUẢ CHUỐI BÍ ẨN
 function parseHeader(lines) {
-  let episodeNumber = 0;
+  let episodeNumber = null;  // null = not yet parsed (0 is valid for intro episode)
   let episodeTitle = "";
 
   for (const line of lines.slice(0, 10)) {
@@ -360,7 +360,7 @@ function parseDialogue(dialogueText) {
 
     // Character line: **Name:** or **Name (direction):**
     // Allow optional bullet prefix "* " for v2 format.
-    const charMatch = line.match(/^(?:\*\s+)?\*\*([^(*]+?)(?:\s*\(([^)]+)\))?\s*:\*\*/);
+    const charMatch = line.match(/^(?:[\*\-]\s+)?\*\*([^(*]+?)(?:\s*\(([^)]+)\))?\s*:\*\*/);
     if (charMatch) {
       currentChar = normalizeCharacterKey(charMatch[1]);
       currentDirection = cleanDialogueDirection(charMatch[2]);
@@ -427,7 +427,7 @@ export function parseEpisode(filePath) {
   const lines = content.split("\n");
   const { episodeNumber, episodeTitle } = parseHeader(lines);
 
-  if (!episodeNumber || !episodeTitle) {
+  if (episodeNumber === null || episodeNumber === undefined || !episodeTitle) {
     throw new Error(
       `Could not parse episode header from ${filePath}. ` +
       `Expected "# 🎬 RỪNG XÌ TIN - TẬP N" and "# <EPISODE TITLE>" near the top.`
